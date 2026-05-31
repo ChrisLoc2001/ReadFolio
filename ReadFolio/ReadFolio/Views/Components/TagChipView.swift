@@ -1,3 +1,11 @@
+//
+//  TagChipView.swift
+//  ReadFolio
+//
+//  Created by Christian Lo Conte on 31/05/2026.
+//
+
+
 import SwiftUI
 
 struct TagChipView: View {

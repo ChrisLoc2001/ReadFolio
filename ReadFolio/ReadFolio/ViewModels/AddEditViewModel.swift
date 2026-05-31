@@ -5,7 +5,7 @@ import Observation
 @Observable
 @MainActor
 final class AddEditViewModel {
-    // Form fields
+    // MARK: - Form fields
     var title: String = ""
     var contentType: ContentType = .book
     var author: String = ""
@@ -28,16 +28,20 @@ final class AddEditViewModel {
     var isbn: String = ""
     var openLibraryKey: String? = nil
 
-    // State
+    // MARK: - Metadata search state
     var isSearchingMetadata: Bool = false
     var metadataSearchQuery: String = ""
-    var metadataResults: [OpenLibraryBook] = []
+    var metadataResults: [MediaSearchResult] = []
     var metadataError: String? = nil
+    var selectedSource: SearchSource = .auto
 
+    // MARK: - Validation
     var validationError: String? = nil
 
     private var repository: ItemRepository?
     private var editingItem: ReadingItem?
+
+    // MARK: - Setup
 
     func setup(context: ModelContext, item: ReadingItem? = nil) {
         repository = ItemRepository(context: context)
@@ -72,6 +76,8 @@ final class AddEditViewModel {
 
     var isEditing: Bool { editingItem != nil }
 
+    // MARK: - Validation & Save
+
     func validate() -> Bool {
         if title.trimmingCharacters(in: .whitespaces).isEmpty {
             validationError = "Il titolo è obbligatorio."
@@ -95,7 +101,7 @@ final class AddEditViewModel {
     }
 
     private func buildItem(context: ModelContext) -> ReadingItem {
-        let item = ReadingItem(
+        ReadingItem(
             title: title.trimmingCharacters(in: .whitespaces),
             contentType: contentType,
             author: author,
@@ -117,7 +123,6 @@ final class AddEditViewModel {
             openLibraryKey: openLibraryKey,
             isbn: isbn.isEmpty ? nil : isbn
         )
-        return item
     }
 
     private func applyChanges(to item: ReadingItem, context: ModelContext) {
@@ -157,6 +162,8 @@ final class AddEditViewModel {
         }
     }
 
+    // MARK: - Tags
+
     func addTag() {
         let trimmed = tagInput.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, !tags.contains(trimmed) else { return }
@@ -170,34 +177,59 @@ final class AddEditViewModel {
 
     // MARK: - Metadata Search
 
-    func searchMetadata() async {
-        guard !metadataSearchQuery.isEmpty else { return }
+    /// Chiamato sia all'apertura (query vuota → top results)
+    /// sia dopo che l'utente digita (query valorizzata → ricerca affinata).
+    func searchMetadata(googleBooksKey: String = "", comicVineKey: String = "") async {
         isSearchingMetadata = true
         metadataError = nil
         defer { isSearchingMetadata = false }
 
         do {
-            metadataResults = try await OpenLibraryService.shared.search(query: metadataSearchQuery)
+            metadataResults = try await MediaSearchService.shared.search(
+                query: metadataSearchQuery,   // può essere vuota: il service gestisce il default
+                source: selectedSource,
+                contentType: contentType,
+                googleBooksAPIKey: googleBooksKey,
+                comicVineAPIKey: comicVineKey
+            )
         } catch {
             metadataError = error.localizedDescription
             metadataResults = []
         }
     }
 
-    func applyMetadata(_ book: OpenLibraryBook) async {
-        title          = book.title
-        author         = book.authors.joined(separator: ", ")
-        publisher      = book.publisher
-        isbn           = book.isbn ?? ""
-        openLibraryKey = book.id
+    func applyMetadata(_ result: MediaSearchResult) async {
+        title     = result.title
+        author    = result.subtitle
+        publisher = result.secondaryInfo.isEmpty
+                    ? (result.extraInfo["publisher"] ?? "")
+                    : result.secondaryInfo
+        isbn      = result.isbn ?? ""
 
-        if let url = book.coverURL {
-            if let data = await OpenLibraryService.shared.fetchCoverData(from: url) {
+        if let artists = result.extraInfo["artists"], !artists.isEmpty {
+            illustrator = artists
+        }
+        let newTags = result.tags.prefix(5)
+        for t in newTags where !tags.contains(t) {
+            tags.append(t)
+        }
+
+        contentType = result.contentType
+
+        if let url = result.coverURL {
+            let source = resolvedSource(for: result)
+            if let data = await MediaSearchService.shared.fetchCoverData(from: url, source: source) {
                 coverImageData = ImageService.processImage(data)
             }
         }
 
-        isSearchingMetadata = false
-        metadataResults     = []
+        metadataResults = []
+    }
+
+    private func resolvedSource(for result: MediaSearchResult) -> SearchSource {
+        if result.id.hasPrefix("gb_") { return .googleBooks }
+        if result.id.hasPrefix("md_") { return .mangaDex }
+        if result.id.hasPrefix("cv_") { return .comicVine }
+        return .auto
     }
 }

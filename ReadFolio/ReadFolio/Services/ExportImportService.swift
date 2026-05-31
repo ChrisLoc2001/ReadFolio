@@ -1,3 +1,11 @@
+//
+//  ExportImportService.swift
+//  ReadFolio
+//
+//  Created by Christian Lo Conte on 31/05/2026.
+//
+
+
 import Foundation
 import SwiftData
 
@@ -97,8 +105,7 @@ struct ItemDTO: Codable {
             notes: notes,
             genre: genre,
             tags: [], // i tag vengono ricreati separatamente per evitare duplicati
-            isbn: isbn,
-            openLibraryKey: openLibraryKey
+            openLibraryKey: openLibraryKey, isbn: isbn
         )
     }
 }

@@ -1,61 +1,76 @@
-//
-//  ContentView.swift
-//  ReadFolio
-//
-//  Created by Christian Lo Conte on 31/05/2026.
-//
-
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @State private var selectedTab: AppTab = .dashboard
 
     var body: some View {
+        #if os(macOS)
         NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
+            SidebarView(selectedTab: $selectedTab)
         } detail: {
-            Text("Select an item")
+            tabContent(for: selectedTab)
         }
+        .frame(minWidth: 900, minHeight: 600)
+        #else
+        TabView(selection: $selectedTab) {
+            DashboardView()
+                .tabItem { Label("Dashboard", systemImage: "chart.bar.fill") }
+                .tag(AppTab.dashboard)
+
+            LibraryView()
+                .tabItem { Label("Libreria", systemImage: "books.vertical.fill") }
+                .tag(AppTab.library)
+
+            SettingsView()
+                .tabItem { Label("Impostazioni", systemImage: "gearshape.fill") }
+                .tag(AppTab.settings)
+        }
+        #endif
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
-            }
+    @ViewBuilder
+    private func tabContent(for tab: AppTab) -> some View {
+        switch tab {
+        case .dashboard: DashboardView()
+        case .library:   LibraryView()
+        case .settings:  SettingsView()
         }
     }
 }
 
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+enum AppTab: String, CaseIterable, Identifiable {
+    case dashboard, library, settings
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .dashboard: return "Dashboard"
+        case .library:   return "Libreria"
+        case .settings:  return "Impostazioni"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .dashboard: return "chart.bar.fill"
+        case .library:   return "books.vertical.fill"
+        case .settings:  return "gearshape.fill"
+        }
+    }
 }
+
+// MARK: - Sidebar (macOS only)
+#if os(macOS)
+struct SidebarView: View {
+    @Binding var selectedTab: AppTab
+
+    var body: some View {
+        List(AppTab.allCases, selection: $selectedTab) { tab in
+            Label(tab.label, systemImage: tab.icon)
+                .tag(tab)
+        }
+        .listStyle(.sidebar)
+        .navigationTitle("Readfolio")
+    }
+}
+#endif

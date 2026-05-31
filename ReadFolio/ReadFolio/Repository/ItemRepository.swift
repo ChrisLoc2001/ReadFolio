@@ -37,7 +37,7 @@ final class ItemRepository {
         }
     }
 
-    // MARK: - Fetch helpers
+    // MARK: - Fetch
 
     func fetchAll() throws -> [ReadingItem] {
         let descriptor = FetchDescriptor<ReadingItem>(
@@ -54,25 +54,19 @@ final class ItemRepository {
         return try context.fetch(descriptor)
     }
 
+    // Filtro in memoria: evita il bug di SwiftData con enum.rawValue nei #Predicate
     func fetchByStatus(_ status: ReadingStatus) throws -> [ReadingItem] {
-        let raw = status.rawValue
-        let descriptor = FetchDescriptor<ReadingItem>(
-            predicate: #Predicate { $0.status.rawValue == raw },
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-        return try context.fetch(descriptor)
+        let all = try fetchAll()
+        return all.filter { $0.status == status }
     }
 
     // MARK: - Statistics
 
     func countByStatus() throws -> [ReadingStatus: Int] {
+        let all = try fetchAll()
         var result: [ReadingStatus: Int] = [:]
         for status in ReadingStatus.allCases {
-            let raw = status.rawValue
-            let descriptor = FetchDescriptor<ReadingItem>(
-                predicate: #Predicate { $0.status.rawValue == raw }
-            )
-            result[status] = try context.fetchCount(descriptor)
+            result[status] = all.filter { $0.status == status }.count
         }
         return result
     }
@@ -84,27 +78,29 @@ final class ItemRepository {
         return Double(rated.map { $0.rating }.reduce(0, +)) / Double(rated.count)
     }
 
-    /// Libri completati per mese (ultimi 12 mesi)
+    /// Elementi completati per mese (ultimi 12 mesi)
     func completedPerMonth() throws -> [MonthStat] {
-        let raw = ReadingStatus.completed.rawValue
-        let descriptor = FetchDescriptor<ReadingItem>(
-            predicate: #Predicate { $0.status.rawValue == raw && $0.endDate != nil }
-        )
-        let items = try context.fetch(descriptor)
+        let all = try fetchAll()
+        let completed = all.filter { $0.status == .completed && $0.endDate != nil }
+
         let calendar = Calendar.current
         let now = Date()
-
         var stats: [MonthStat] = []
+
         for monthOffset in (0..<12).reversed() {
-            guard let monthDate = calendar.date(byAdding: .month, value: -monthOffset, to: now) else { continue }
+            guard let monthDate = calendar.date(byAdding: .month, value: -monthOffset, to: now)
+            else { continue }
+
             let comps = calendar.dateComponents([.year, .month], from: monthDate)
-            let count = items.filter { item in
+            let count = completed.filter { item in
                 guard let end = item.endDate else { return false }
                 let ic = calendar.dateComponents([.year, .month], from: end)
                 return ic.year == comps.year && ic.month == comps.month
             }.count
+
             stats.append(MonthStat(date: monthDate, count: count))
         }
+
         return stats
     }
 }

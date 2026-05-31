@@ -1,32 +1,33 @@
-//
-//  ReadFolioApp.swift
-//  ReadFolio
-//
-//  Created by Christian Lo Conte on 31/05/2026.
-//
-
 import SwiftUI
 import SwiftData
 
 @main
-struct ReadFolioApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+struct ReadfolioApp: App {
+    let container: ModelContainer
 
+    init() {
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let schema = Schema([ReadingItem.self, Tag.self])
+            // CloudKit sync: sostituisci `ModelConfiguration(schema:)` con
+            // `ModelConfiguration(schema:, cloudKitDatabase: .automatic)`
+            // dopo aver abilitato iCloud + CloudKit nel progetto Xcode.
+            let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+            container = try ModelContainer(for: schema, configurations: [config])
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            fatalError("Impossibile creare il ModelContainer: \(error)")
         }
-    }()
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(sharedModelContainer)
+        .modelContainer(container)
+
+        #if os(macOS)
+        Settings {
+            SettingsView()
+        }
+        #endif
     }
 }
