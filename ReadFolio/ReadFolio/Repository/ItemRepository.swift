@@ -33,7 +33,9 @@ final class ItemRepository {
         do {
             try context.save()
         } catch {
+            #if DEBUG
             print("SwiftData save error: \(error)")
+            #endif
         }
     }
 

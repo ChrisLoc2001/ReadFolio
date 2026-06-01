@@ -1,0 +1,10 @@
+//
+//  ReadFolio.xcconfig
+//  ReadFolio
+//
+//  Created by Christian Lo Conte on 01/06/2026.
+//
+
+// Readfolio.xcconfig
+// Questo file è committabile. Secrets.xcconfig NON lo è.
+#include? "Secrets.xcconfig"

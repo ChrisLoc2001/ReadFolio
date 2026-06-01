@@ -1,5 +1,24 @@
 import Foundation
 
+// ─────────────────────────────────────────────
+// GOOGLE BOOKS API KEY
+// Ottieni la tua chiave gratuita su:
+// https://console.cloud.google.com
+//
+// Passaggi:
+// 1. Crea un progetto
+// 2. Vai su "API e servizi" → "Libreria"
+// 3. Cerca "Books API" e abilitala
+// 4. Vai su "Credenziali" → "Crea credenziali" → "Chiave API"
+// 5. Sostituisci il valore qui sotto con la tua chiave
+//
+// Senza key:  ~100 richieste/giorno
+// Con key:   1000 richieste/giorno (gratuito)
+// ─────────────────────────────────────────────
+private nonisolated var googleBooksAPIKey: String {
+    Bundle.main.infoDictionary?["GoogleBooksAPIKey"] as? String ?? ""
+}
+
 struct GoogleBooksResult: Identifiable {
     let id: String
     let title: String
@@ -37,9 +56,7 @@ actor GoogleBooksService {
 
     private let session: URLSession
     private let base = "https://www.googleapis.com/books/v1"
-
-    // Query usata quando la barra è vuota: restituisce classici e bestseller popolari
-    private let defaultQuery = "subject:fiction+orderBy=relevance"
+    private let defaultQuery = "subject:fiction"
 
     init() {
         let config = URLSessionConfiguration.default
@@ -49,22 +66,30 @@ actor GoogleBooksService {
     }
 
     // MARK: - Search
-    // Se query è vuota carica i risultati di default (top libri popolari).
-    // Se query è valorizzata esegue una ricerca normale.
 
     func search(query: String) async throws -> [GoogleBooksResult] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         let effectiveQuery = trimmed.isEmpty ? defaultQuery : trimmed
 
-        var components = URLComponents(string: "\(base)/volumes")!
-        components.queryItems = [
+        guard var components = URLComponents(string: "\(base)/volumes") else {
+            throw GoogleBooksError.decodingError("URL base non valido")
+        }
+        
+        var queryItems: [URLQueryItem] = [
             URLQueryItem(name: "q",          value: effectiveQuery),
             URLQueryItem(name: "maxResults", value: "20"),
             URLQueryItem(name: "printType",  value: "books"),
-            URLQueryItem(name: "orderBy",    value: trimmed.isEmpty ? "relevance" : "relevance"),
+            URLQueryItem(name: "orderBy",    value: "relevance"),
             URLQueryItem(name: "fields",
                          value: "items(id,volumeInfo(title,authors,publisher,publishedDate,description,industryIdentifiers,pageCount,categories,language,imageLinks))")
         ]
+
+        // Aggiunge la key solo se è stata configurata
+        if !googleBooksAPIKey.isEmpty && googleBooksAPIKey != "[INSERISCI LA TUA API KEY QUI]" {
+            queryItems.append(URLQueryItem(name: "key", value: googleBooksAPIKey))
+        }
+
+        components.queryItems = queryItems
 
         guard let url = components.url else {
             throw GoogleBooksError.decodingError("URL non valido")

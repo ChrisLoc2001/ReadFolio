@@ -1,8 +1,19 @@
 import Foundation
 
-// Comic Vine API — https://comicvine.gamespot.com/api/documentation
-// Richiede API key gratuita: https://comicvine.gamespot.com/api/
-// URLSession funziona perfettamente; è solo il browser (CORS) a essere bloccato.
+// ─────────────────────────────────────────────
+// COMIC VINE API KEY
+// Ottieni la tua chiave gratuita su:
+// https://comicvine.gamespot.com/api
+//
+// Passaggi:
+// 1. Registrati o accedi su comicvine.gamespot.com
+// 2. Vai su https://comicvine.gamespot.com/api
+// 3. La key è visibile direttamente nella pagina
+// 4. Sostituisci il valore qui sotto con la tua chiave
+// ─────────────────────────────────────────────
+private nonisolated var comicVineAPIKey: String {
+    Bundle.main.infoDictionary?["ComicVineAPIKey"] as? String ?? ""
+}
 
 struct ComicVineResult: Identifiable {
     let id: Int
@@ -25,11 +36,16 @@ enum ComicVineError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingAPIKey:       return "Inserisci la tua API key Comic Vine nelle Impostazioni."
-        case .networkError(let e): return "Errore di rete: \(e.localizedDescription)"
-        case .decodingError:       return "Errore nel formato risposta Comic Vine."
-        case .noResults:           return "Nessun fumetto trovato."
-        case .apiError(let msg):   return "Errore API: \(msg)"
+        case .missingAPIKey:
+            return "API key Comic Vine non configurata. Vedi il file ComicVineService.swift."
+        case .networkError(let e):
+            return "Errore di rete: \(e.localizedDescription)"
+        case .decodingError:
+            return "Errore nel formato risposta Comic Vine."
+        case .noResults:
+            return "Nessun fumetto trovato."
+        case .apiError(let msg):
+            return "Errore API: \(msg)"
         }
     }
 }
@@ -51,21 +67,34 @@ actor ComicVineService {
         self.session = URLSession(configuration: config)
     }
 
-    // MARK: - Search volumes
+    // MARK: - Validazione key
 
-    func searchVolumes(query: String, apiKey: String) async throws -> [ComicVineResult] {
-        guard !apiKey.trimmingCharacters(in: .whitespaces).isEmpty else {
+    private func validatedKey() throws -> String {
+        let trimmed = comicVineAPIKey.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty && trimmed != "[INSERISCI LA TUA API KEY QUI]" else {
             throw ComicVineError.missingAPIKey
         }
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
-            throw ComicVineError.noResults
+        return trimmed
+    }
+
+    // MARK: - Search Volumes
+
+    func searchVolumes(query: String, apiKey: String = comicVineAPIKey) async throws -> [ComicVineResult] {
+        let key = try validatedKey()
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+
+        if trimmed.isEmpty {
+            return try await fetchPopular(apiKey: key)
         }
 
-        var components = URLComponents(string: "\(base)/search/")!
+        guard var components = URLComponents(string: "\(base)/search/") else {
+            throw ComicVineError.decodingError
+        }
+
         components.queryItems = [
-            URLQueryItem(name: "apikey",    value: apiKey),
+            URLQueryItem(name: "apikey",    value: key),
             URLQueryItem(name: "format",    value: "json"),
-            URLQueryItem(name: "query",     value: query),
+            URLQueryItem(name: "query",     value: trimmed),
             URLQueryItem(name: "resources", value: "volume"),
             URLQueryItem(name: "limit",     value: "20"),
             URLQueryItem(name: "fieldlist",
@@ -73,7 +102,32 @@ actor ComicVineService {
         ]
 
         guard let url = components.url else { throw ComicVineError.decodingError }
+        return try await fetch(url: url)
+    }
 
+    // MARK: - Popular (query vuota)
+
+    private func fetchPopular(apiKey: String) async throws -> [ComicVineResult] {
+        guard var components = URLComponents(string: "\(base)/volumes/") else {
+            throw ComicVineError.decodingError
+        }
+
+        components.queryItems = [
+            URLQueryItem(name: "apikey",    value: apiKey),
+            URLQueryItem(name: "format",    value: "json"),
+            URLQueryItem(name: "limit",     value: "20"),
+            URLQueryItem(name: "sort",      value: "count_of_issues:desc"),
+            URLQueryItem(name: "fieldlist",
+                         value: "id,name,description,publisher,startyear,image,countofissues")
+        ]
+
+        guard let url = components.url else { throw ComicVineError.decodingError }
+        return try await fetch(url: url)
+    }
+
+    // MARK: - Fetch comune
+
+    private func fetch(url: URL) async throws -> [ComicVineResult] {
         var request = URLRequest(url: url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 
@@ -92,16 +146,16 @@ actor ComicVineService {
         return try parseVolumes(data: data)
     }
 
-    // MARK: - Search issues
+    // MARK: - Search Issues
 
-    func searchIssues(query: String, apiKey: String) async throws -> [ComicVineResult] {
-        guard !apiKey.trimmingCharacters(in: .whitespaces).isEmpty else {
-            throw ComicVineError.missingAPIKey
+    func searchIssues(query: String) async throws -> [ComicVineResult] {
+        let key = try validatedKey()
+
+        guard var components = URLComponents(string: "\(base)/search/") else {
+            throw ComicVineError.decodingError
         }
-
-        var components = URLComponents(string: "\(base)/search/")!
         components.queryItems = [
-            URLQueryItem(name: "apikey",    value: apiKey),
+            URLQueryItem(name: "apikey",    value: key),
             URLQueryItem(name: "format",    value: "json"),
             URLQueryItem(name: "query",     value: query),
             URLQueryItem(name: "resources", value: "issue"),
@@ -156,8 +210,8 @@ actor ComicVineService {
             else { return nil }
 
             let description = stripHTML(item["description"] as? String ?? "")
-            let startYear   = item["startyear"]      as? String
-            let issueCount  = item["countofissues"]  as? Int
+            let startYear   = item["startyear"]     as? String
+            let issueCount  = item["countofissues"] as? Int
 
             var publisher = ""
             if let pub = item["publisher"] as? [String: Any] {
@@ -172,14 +226,14 @@ actor ComicVineService {
             }
 
             return ComicVineResult(
-                id: id,
-                name: name,
+                id:          id,
+                name:        name,
                 issueNumber: nil,
                 description: description,
-                publisher: publisher,
-                startYear: startYear,
-                coverURL: coverURL,
-                issueCount: issueCount
+                publisher:   publisher,
+                startYear:   startYear,
+                coverURL:    coverURL,
+                issueCount:  issueCount
             )
         }
     }
@@ -217,14 +271,14 @@ actor ComicVineService {
                 : "\(volumeName) #\(issueNumber ?? "")"
 
             return ComicVineResult(
-                id: id,
-                name: displayName,
+                id:          id,
+                name:        displayName,
                 issueNumber: issueNumber,
                 description: description,
-                publisher: "",
-                startYear: nil,
-                coverURL: coverURL,
-                issueCount: nil
+                publisher:   "",
+                startYear:   nil,
+                coverURL:    coverURL,
+                issueCount:  nil
             )
         }
     }
@@ -241,9 +295,11 @@ actor ComicVineService {
             result = result.replacingOccurrences(of: tag, with: replacement,
                                                   options: .caseInsensitive)
         }
-        if let regex = try? NSRegularExpression(pattern: "<[^>]+>", options: .caseInsensitive) {
+        if let regex = try? NSRegularExpression(pattern: "<[^>]+>",
+                                                 options: .caseInsensitive) {
             let range = NSRange(result.startIndex..., in: result)
-            result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: "")
+            result = regex.stringByReplacingMatches(in: result, range: range,
+                                                     withTemplate: "")
         }
         let htmlEntities: [(String, String)] = [
             ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),

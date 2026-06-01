@@ -4,8 +4,9 @@ struct MetadataSearchView: View {
     @Bindable var vm: AddEditViewModel
     @Environment(\.dismiss) private var dismiss
 
-    @AppStorage("googleBooksAPIKey") private var googleBooksKey = ""
-    @AppStorage("comicVineAPIKey")   private var comicVineKey   = ""
+    private var googleBooksKey: String { KeychainHelper.load(for: "googleBooksAPIKey") }
+    private var comicVineKey:   String { KeychainHelper.load(for: "comicVineAPIKey") }
+
 
     var body: some View {
         NavigationStack {

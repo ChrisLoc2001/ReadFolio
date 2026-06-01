@@ -1,5 +1,18 @@
 import Foundation
 
+// ─────────────────────────────────────────────
+// MANGADEX API KEY
+// ✅ NESSUNA API KEY RICHIESTA
+//
+// MangaDex è completamente gratuito e pubblico.
+// Non serve registrarsi né configurare nulla.
+// Rate limit: 5 richieste/secondo — rispettato
+// automaticamente dall'app grazie ai Task async.
+//
+// Documentazione ufficiale:
+// https://api.mangadex.org/docs
+// ─────────────────────────────────────────────
+
 struct MangaDexResult: Identifiable {
     let id: String
     let title: String
@@ -38,9 +51,6 @@ actor MangaDexService {
     private let session: URLSession
     private let base = "https://api.mangadex.org"
 
-    // Query di default quando la barra è vuota: manga popolari
-    private let defaultQuery = "one piece"
-
     init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 15
@@ -52,19 +62,19 @@ actor MangaDexService {
     func search(query: String) async throws -> [MangaDexResult] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
 
-        // Se la query è vuota usiamo l'endpoint /manga con ordine per popolarità
         if trimmed.isEmpty {
             return try await fetchPopular()
         }
 
-        var components = URLComponents(string: "\(base)/manga")!
+        guard var components = URLComponents(string: "\(base)/manga") else {
+            throw MangaDexError.decodingError
+        }
         components.queryItems = [
             URLQueryItem(name: "title",            value: trimmed),
             URLQueryItem(name: "limit",            value: "20"),
             URLQueryItem(name: "includes[]",       value: "author"),
             URLQueryItem(name: "includes[]",       value: "artist"),
             URLQueryItem(name: "includes[]",       value: "coverart"),
-            // Rimosso il filtro lingua italiano: troppo restrittivo
             URLQueryItem(name: "contentRating[]",  value: "safe"),
             URLQueryItem(name: "contentRating[]",  value: "suggestive"),
             URLQueryItem(name: "order[relevance]", value: "desc")
@@ -77,7 +87,10 @@ actor MangaDexService {
     // MARK: - Popular (query vuota)
 
     private func fetchPopular() async throws -> [MangaDexResult] {
-        var components = URLComponents(string: "\(base)/manga")!
+        guard var components = URLComponents(string: "\(base)/manga") else {
+            throw MangaDexError.decodingError
+        }
+
         components.queryItems = [
             URLQueryItem(name: "limit",                value: "20"),
             URLQueryItem(name: "includes[]",           value: "author"),
@@ -85,7 +98,6 @@ actor MangaDexService {
             URLQueryItem(name: "includes[]",           value: "coverart"),
             URLQueryItem(name: "contentRating[]",      value: "safe"),
             URLQueryItem(name: "contentRating[]",      value: "suggestive"),
-            // Ordina per numero di follower (= popolarità)
             URLQueryItem(name: "order[followedCount]", value: "desc")
         ]
 

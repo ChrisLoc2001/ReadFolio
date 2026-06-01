@@ -6,15 +6,17 @@ struct ReadfolioApp: App {
     let container: ModelContainer
 
     init() {
+        let schema = Schema([ReadingItem.self, Tag.self])
         do {
-            let schema = Schema([ReadingItem.self, Tag.self])
-            // CloudKit sync: sostituisci `ModelConfiguration(schema:)` con
-            // `ModelConfiguration(schema:, cloudKitDatabase: .automatic)`
-            // dopo aver abilitato iCloud + CloudKit nel progetto Xcode.
             let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
             container = try ModelContainer(for: schema, configurations: [config])
         } catch {
-            fatalError("Impossibile creare il ModelContainer: \(error)")
+            #if DEBUG
+            print("ModelContainer error: \(error)")
+            #endif
+            let fallback = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+            container = (try? ModelContainer(for: schema, configurations: [fallback]))
+                ?? { fatalError("ModelContainer irrecuperabile: \(error)") }()
         }
     }
 

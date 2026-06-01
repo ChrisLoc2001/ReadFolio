@@ -5,9 +5,9 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
 
-    // API Keys persistite in UserDefaults
-    @AppStorage("googleBooksAPIKey") private var googleBooksKey = ""
-    @AppStorage("comicVineAPIKey")   private var comicVineKey   = ""
+    @State private var googleBooksKey = KeychainHelper.load(for: "googleBooksAPIKey")
+    @State private var comicVineKey   = KeychainHelper.load(for: "comicVineAPIKey")
+
 
     @State private var showingImportPicker = false
     @State private var feedbackMessage: String? = nil
@@ -68,6 +68,12 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Impostazioni")
+            .onChange(of: googleBooksKey) { _, new in
+                KeychainHelper.save(new, for: "googleBooksAPIKey")
+            }
+            .onChange(of: comicVineKey) { _, new in
+                KeychainHelper.save(new, for: "comicVineAPIKey")
+            }
             .fileImporter(
                 isPresented: $showingImportPicker,
                 allowedContentTypes: [.json],
