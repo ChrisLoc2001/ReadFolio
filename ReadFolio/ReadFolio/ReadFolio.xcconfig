@@ -6,5 +6,4 @@
 //
 
 // Readfolio.xcconfig
-// Questo file è committabile. Secrets.xcconfig NON lo è.
 #include? "Secrets.xcconfig"
