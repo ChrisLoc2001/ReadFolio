@@ -1,11 +1,16 @@
 import SwiftUI
 import SwiftData
+import FirebaseCore
+import GoogleSignIn
 
 @main
 struct ReadfolioApp: App {
     let container: ModelContainer
+    @StateObject private var authVM = AuthViewModel()
 
     init() {
+        FirebaseApp.configure()
+
         let schema = Schema([ReadingItem.self, Tag.self])
         do {
             let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
@@ -22,14 +27,36 @@ struct ReadfolioApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
+                .environmentObject(authVM)
         }
         .modelContainer(container)
 
         #if os(macOS)
         Settings {
             SettingsView()
+                .environmentObject(authVM)
         }
         #endif
+    }
+}
+
+// MARK: - RootView
+
+struct RootView: View {
+    @EnvironmentObject private var authVM: AuthViewModel
+
+    var body: some View {
+        Group {
+            if authVM.isCheckingAuth {
+                ProgressView("Caricamento…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if authVM.isAuthenticated {
+                ContentView()
+            } else {
+                AuthView()
+            }
+        }
+        .animation(.easeInOut, value: authVM.isAuthenticated)
     }
 }

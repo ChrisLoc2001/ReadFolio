@@ -1,9 +1,12 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import FirebaseAuth
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
+    @EnvironmentObject private var authVM: AuthViewModel
+
 
     @State private var googleBooksKey = KeychainHelper.load(for: "googleBooksAPIKey")
     @State private var comicVineKey   = KeychainHelper.load(for: "comicVineAPIKey")
@@ -65,6 +68,18 @@ struct SettingsView: View {
                     LabeledContent("Libri",    value: "Google Books API")
                     LabeledContent("Manga",    value: "MangaDex API")
                     LabeledContent("Fumetti",  value: "Comic Vine API")
+                }
+            }
+            Section {
+                Button(role: .destructive) {
+                    authVM.logout()
+                } label: {
+                    Label("Esci dall'account", systemImage: "rectangle.portrait.and.arrow.right")
+                }
+            } footer: {
+                if let email = authVM.currentUser?.email {
+                    Text("Accesso come: \(email)")
+                        .font(.caption)
                 }
             }
             .navigationTitle("Impostazioni")

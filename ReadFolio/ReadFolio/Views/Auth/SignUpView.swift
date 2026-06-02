@@ -1,4 +1,6 @@
 import SwiftUI
+import GoogleSignInSwift
+import AuthenticationServices
 
 struct SignUpView: View {
     @EnvironmentObject private var authVM: AuthViewModel
@@ -16,7 +18,7 @@ struct SignUpView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "person.badge.plus")
                         .font(.system(size: 50))
-                        .foregroundStyle(.accentColor)
+                        .foregroundStyle(Color.accentColor)
                     Text("Crea account")
                         .font(.largeTitle.bold())
                     Text("Inizia a tracciare le tue letture")
@@ -89,7 +91,8 @@ struct SignUpView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(14)
-                    .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color.accentColor,
+                                in: RoundedRectangle(cornerRadius: 12))
                     .foregroundStyle(.white)
                 }
                 .disabled(
@@ -99,34 +102,37 @@ struct SignUpView: View {
                     email.isEmpty
                 )
 
-                // MARK: - Divider
-                HStack {
-                    Rectangle()
-                        .frame(height: 0.5)
-                        .foregroundStyle(.secondary.opacity(0.4))
-                    Text("oppure")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Rectangle()
-                        .frame(height: 0.5)
-                        .foregroundStyle(.secondary.opacity(0.4))
-                }
+                divider
 
-                // MARK: - Google
-                Button {
-                    Task { await authVM.signInWithGoogle() }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "globe")
-                        Text("Continua con Google")
-                            .fontWeight(.medium)
+                // MARK: - Social buttons
+                HStack(spacing: 16) {
+                    // Google — solo icona
+                    GoogleSignInButton(scheme: .light, style: .icon, state: .normal) {
+                        Task { await authVM.signInWithGoogle() }
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(12)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                    .foregroundStyle(.primary)
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .disabled(authVM.isLoading)
+
+                    // Apple — pulsante custom solo icona
+                    Button {
+                        // disponibile prossimamente
+                    } label: {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.black)
+                            .frame(width: 60, height: 60)
+                            .overlay {
+                                Image(systemName: "apple.logo")
+                                    .font(.system(size: 24, weight: .medium))
+                                    .foregroundStyle(.white)
+                            }
+                    }
+                    .disabled(true)
+                    .opacity(0.4)
                 }
-                .disabled(authVM.isLoading)
+                .frame(maxWidth: .infinity)
+
+                divider
 
                 // MARK: - Switch
                 HStack {
@@ -139,6 +145,22 @@ struct SignUpView: View {
                 .padding(.bottom, 24)
             }
             .padding(24)
+        }
+    }
+
+    // MARK: - Divider
+
+    private var divider: some View {
+        HStack {
+            Rectangle()
+                .frame(height: 0.5)
+                .foregroundStyle(.secondary.opacity(0.4))
+            Text("oppure")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Rectangle()
+                .frame(height: 0.5)
+                .foregroundStyle(.secondary.opacity(0.4))
         }
     }
 }

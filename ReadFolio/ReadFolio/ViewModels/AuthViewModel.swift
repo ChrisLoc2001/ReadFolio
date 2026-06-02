@@ -1,11 +1,20 @@
+//
+//  AuthViewModel.swift
+//  ReadFolio
+//
+//  Created by Christian Lo Conte on 01/06/2026.
+//
+
+
 import Foundation
 import SwiftUI
 import FirebaseAuth
 import GoogleSignIn
+import Combine
 
 @MainActor
 final class AuthViewModel: ObservableObject {
-
+    
     // MARK: - State
     @Published var isAuthenticated  = false
     @Published var isCheckingAuth   = true
@@ -13,7 +22,9 @@ final class AuthViewModel: ObservableObject {
     @Published var errorMessage:    String?
     @Published var currentUser:     User?
 
+    
     // MARK: - Init
+    
     init() {
         checkAuthState()
     }

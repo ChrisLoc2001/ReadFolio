@@ -1,3 +1,11 @@
+//
+//  AuthView.swift
+//  ReadFolio
+//
+//  Created by Christian Lo Conte on 01/06/2026.
+//
+
+
 import SwiftUI
 
 struct AuthView: View {

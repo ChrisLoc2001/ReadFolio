@@ -2,8 +2,25 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleIdentifier</key>
+			<string></string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>1</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.835461560099-hks9he7r3pqdm4s1neo41ifff99aicom</string>
+			</array>
+		</dict>
+	</array>
 	<key>ComicVineAPIKey</key>
 	<string>$(COMIC_VINE_API_KEY)</string>
+	<key>GIDClientID</key>
+	<string>835461560099-hks9he7r3pqdm4s1neo41ifff99aicom.apps.googleusercontent.com</string>
 	<key>GoogleBooksAPIKey </key>
 	<string>$(GOOGLE_BOOKS_API_KEY)</string>
 </dict>
