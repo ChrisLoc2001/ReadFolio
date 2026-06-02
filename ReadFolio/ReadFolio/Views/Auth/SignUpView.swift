@@ -1,13 +1,15 @@
 import SwiftUI
 import GoogleSignInSwift
-import AuthenticationServices
 
 struct SignUpView: View {
     @EnvironmentObject private var authVM: AuthViewModel
 
     @State private var email           = ""
+    @State private var username        = ""
     @State private var password        = ""
     @State private var confirmPassword = ""
+    @State private var isCheckingUsername = false
+    @State private var usernameAvailable: Bool? = nil
 
     var switchToLogin: () -> Void
 
@@ -38,6 +40,44 @@ struct SignUpView: View {
                         .padding(12)
                         .background(.regularMaterial,
                                     in: RoundedRectangle(cornerRadius: 10))
+
+                    // Username con feedback disponibilità
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            TextField("Nome utente (min. 3 caratteri)", text: $username)
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                                .padding(12)
+                                .background(.regularMaterial,
+                                            in: RoundedRectangle(cornerRadius: 10))
+                                .onChange(of: username) { _, newValue in
+                                    checkUsernameAvailability(newValue)
+                                }
+
+                            if isCheckingUsername {
+                                ProgressView()
+                                    .padding(.trailing, 4)
+                            } else if let available = usernameAvailable {
+                                Image(systemName: available
+                                      ? "checkmark.circle.fill"
+                                      : "xmark.circle.fill")
+                                .foregroundStyle(available ? .green : .red)
+                                .padding(.trailing, 4)
+                            }
+                        }
+
+                        if let available = usernameAvailable, !available {
+                            Text("Nome utente non disponibile")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .padding(.leading, 4)
+                        } else if let available = usernameAvailable, available {
+                            Text("Nome utente disponibile")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                                .padding(.leading, 4)
+                        }
+                    }
 
                     SecureField("Password (min. 6 caratteri)", text: $password)
                         .textContentType(.newPassword)
@@ -76,9 +116,10 @@ struct SignUpView: View {
                 Button {
                     Task {
                         await authVM.signUp(
-                            email: email,
-                            password: password,
-                            confirmPassword: confirmPassword
+                            email:           email,
+                            password:        password,
+                            confirmPassword: confirmPassword,
+                            username:        username
                         )
                     }
                 } label: {
@@ -95,18 +136,12 @@ struct SignUpView: View {
                                 in: RoundedRectangle(cornerRadius: 12))
                     .foregroundStyle(.white)
                 }
-                .disabled(
-                    authVM.isLoading ||
-                    password.count < 6 ||
-                    password != confirmPassword ||
-                    email.isEmpty
-                )
+                .disabled(isFormInvalid)
 
                 divider
 
                 // MARK: - Social buttons
                 HStack(spacing: 16) {
-                    // Google — solo icona
                     GoogleSignInButton(scheme: .light, style: .icon, state: .normal) {
                         Task { await authVM.signInWithGoogle() }
                     }
@@ -114,21 +149,25 @@ struct SignUpView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .disabled(authVM.isLoading)
 
-                    // Apple — pulsante custom solo icona
-                    Button {
-                        // disponibile prossimamente
-                    } label: {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.black)
-                            .frame(width: 60, height: 60)
-                            .overlay {
-                                Image(systemName: "apple.logo")
-                                    .font(.system(size: 24, weight: .medium))
-                                    .foregroundStyle(.white)
-                            }
+                    VStack(spacing: 4) {
+                        Button {
+                        } label: {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.black)
+                                .frame(width: 60, height: 60)
+                                .overlay {
+                                    Image(systemName: "apple.logo")
+                                        .font(.system(size: 24, weight: .medium))
+                                        .foregroundStyle(.white)
+                                }
+                        }
+                        .disabled(true)
+                        .opacity(0.4)
+
+                        Text("Presto")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
-                    .disabled(true)
-                    .opacity(0.4)
                 }
                 .frame(maxWidth: .infinity)
 
@@ -148,7 +187,31 @@ struct SignUpView: View {
         }
     }
 
-    // MARK: - Divider
+    // MARK: - Helpers
+
+    private var isFormInvalid: Bool {
+        authVM.isLoading          ||
+        password.count < 6        ||
+        password != confirmPassword ||
+        email.isEmpty             ||
+        username.count < 3        ||
+        usernameAvailable == false
+    }
+
+    private func checkUsernameAvailability(_ value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 3 else {
+            usernameAvailable = nil
+            return
+        }
+        isCheckingUsername = true
+        Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            guard username == value else { return }
+            usernameAvailable  = await authVM.isUsernameAvailable(trimmed)
+            isCheckingUsername = false
+        }
+    }
 
     private var divider: some View {
         HStack {

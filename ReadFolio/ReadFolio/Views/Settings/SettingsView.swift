@@ -1,183 +1,82 @@
 import SwiftUI
-import SwiftData
 import UniformTypeIdentifiers
 import FirebaseAuth
 
 struct SettingsView: View {
-    @Environment(\.modelContext) private var context
     @EnvironmentObject private var authVM: AuthViewModel
-
-    @State private var googleBooksKey = KeychainHelper.load(for: "googleBooksAPIKey")
-    @State private var comicVineKey   = KeychainHelper.load(for: "comicVineAPIKey")
-
-
-    @State private var showingImportPicker = false
-    @State private var feedbackMessage: String? = nil
-    @State private var showingFeedback = false
-    @State private var isExporting = false
 
     var body: some View {
         NavigationStack {
-            Form {
-                // MARK: - API Keys
-                Section {
-                    apiKeyRow(
-                        label: "Google Books",
-                        placeholder: "Facoltativa — 1000 req/giorno con key",
-                        key: $googleBooksKey,
-                        infoURL: "https://developers.google.com/books"
-                    )
-                    apiKeyRow(
-                        label: "Comic Vine",
-                        placeholder: "Obbligatoria per i fumetti",
-                        key: $comicVineKey,
-                        infoURL: "https://comicvine.gamespot.com/api"
-                    )
-                } header: {
-                    Text("API Keys")
-                } footer: {
-                    Text("MangaDex non richiede alcuna key. Le chiavi vengono salvate solo su questo dispositivo.")
-                }
-
-                // MARK: - Dati
-                Section("Dati") {
-                    Button {
-                        isExporting = true
-                        exportData()
-                        isExporting = false
-                    } label: {
-                        Label("Esporta in JSON", systemImage: "arrow.up.doc")
-                    }
-                    .disabled(isExporting)
-                    .keyboardShortcut("e", modifiers: [.command, .shift])
-
-                    Button {
-                        showingImportPicker = true
-                    } label: {
-                        Label("Importa da JSON", systemImage: "arrow.down.doc")
-                    }
-                    .keyboardShortcut("i", modifiers: [.command, .shift])
-                }
-
-                // MARK: - Info
-                Section("Info") {
-                    LabeledContent("Versione", value: appVersion)
-                    LabeledContent("Build",    value: buildNumber)
-                    LabeledContent("Persistenza", value: "SwiftData")
-                    LabeledContent("Libri",    value: "Google Books API")
-                    LabeledContent("Manga",    value: "MangaDex API")
-                    LabeledContent("Fumetti",  value: "Comic Vine API")
-                }
-            }
-            Section {
-                Button(role: .destructive) {
-                    authVM.logout()
-                } label: {
-                    Label("Esci dall'account", systemImage: "rectangle.portrait.and.arrow.right")
-                }
-            } footer: {
-                if let email = authVM.currentUser?.email {
-                    Text("Accesso come: \(email)")
-                        .font(.caption)
+            VStack(spacing: 0) {
+                accountHeader
+                Form {
+                    infoSection
+                    logoutSection
                 }
             }
             .navigationTitle("Impostazioni")
-            .onChange(of: googleBooksKey) { _, new in
-                KeychainHelper.save(new, for: "googleBooksAPIKey")
-            }
-            .onChange(of: comicVineKey) { _, new in
-                KeychainHelper.save(new, for: "comicVineAPIKey")
-            }
-            .fileImporter(
-                isPresented: $showingImportPicker,
-                allowedContentTypes: [.json],
-                allowsMultipleSelection: false
-            ) { result in
-                importData(result: result)
-            }
-            .alert("Operazione completata", isPresented: $showingFeedback) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(feedbackMessage ?? "")
-            }
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 
-    // MARK: - API Key Row
+    // MARK: - Account Header (opzione B)
 
-    private func apiKeyRow(
-        label: String,
-        placeholder: String,
-        key: Binding<String>,
-        infoURL: String
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(label)
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                Link("Ottieni key", destination: URL(string: infoURL)!)
-                    .font(.caption)
+    private var accountHeader: some View {
+        VStack(spacing: 12) {
+            // Avatar
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: 80, height: 80)
+                Text(authVM.avatarLetter)
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(.white)
             }
-            SecureField(placeholder, text: key)
-                .font(.caption)
-                .textContentType(.password)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
+            .shadow(radius: 4)
+
+            // Nome utente
+            Text(authVM.displayName)
+                .font(.title2.bold())
+
+            // Email
+            if let email = authVM.currentUser?.email {
+                Text(email)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+        .background(.regularMaterial)
     }
 
-    // MARK: - Export
+    // MARK: - Info
 
-    private func exportData() {
-        Task {
-            do {
-                let repo  = ItemRepository()
-                let items = try await repo.fetchAll()
-                let data  = try ExportImportService.exportJSON(items: items)
-                let filename = "readfolio_export_\(Date().ISO8601Format()).json"
-                let url = FileManager.default.temporaryDirectory
-                            .appendingPathComponent(filename)
-                try data.write(to: url)
-                feedbackMessage = "Esportati \(items.count) elementi.\nFile: \(url.lastPathComponent)"
-            } catch {
-                feedbackMessage = "Errore: \(error.localizedDescription)"
-            }
-            showingFeedback = true
+    private var infoSection: some View {
+        Section("Info app") {
+            LabeledContent("Versione",    value: appVersion)
+            LabeledContent("Build",       value: buildNumber)
+            LabeledContent("Libri",       value: "Google Books API")
+            LabeledContent("Manga",       value: "MangaDex API")
+            LabeledContent("Fumetti",     value: "Comic Vine API")
+            LabeledContent("Database",    value: "Firebase Firestore")
         }
     }
 
-    // MARK: - Import
-    
-    private func importData(result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard let url = urls.first else { return }
-            guard url.startAccessingSecurityScopedResource() else {
-                feedbackMessage = "Impossibile accedere al file."
-                showingFeedback = true
-                return
-            }
-            defer { url.stopAccessingSecurityScopedResource() }
-            Task {
-                do {
-                    let data  = try Data(contentsOf: url)
-                    let userID = authVM.currentUser?.uid ?? ""
-                    let items = try ExportImportService.importJSON(data: data, userID: userID)
-                    let repo  = ItemRepository()
-                    for item in items {
-                        try await repo.insert(item)
-                    }
-                    feedbackMessage = "Importati \(items.count) elementi con successo."
-                } catch {
-                    feedbackMessage = "Errore: \(error.localizedDescription)"
+    // MARK: - Logout
+
+    private var logoutSection: some View {
+        Section {
+            Button(role: .destructive) {
+                authVM.logout()
+            } label: {
+                HStack {
+                    Spacer()
+                    Label("Esci dall'account",
+                          systemImage: "rectangle.portrait.and.arrow.right")
+                    Spacer()
                 }
-                showingFeedback = true
             }
-        case .failure(let error):
-            feedbackMessage = "Impossibile aprire il file: \(error.localizedDescription)"
-            showingFeedback = true
         }
     }
 
@@ -186,6 +85,7 @@ struct SettingsView: View {
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
     }
+
     private var buildNumber: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
     }

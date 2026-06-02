@@ -2,21 +2,28 @@ import Foundation
 import SwiftUI
 import Combine
 import FirebaseAuth
+import FirebaseFirestore
 import GoogleSignIn
 
 @MainActor
 final class AuthViewModel: ObservableObject {
 
+    // MARK: - State
     @Published var isAuthenticated: Bool   = false
     @Published var isCheckingAuth:  Bool   = true
     @Published var isLoading:       Bool   = false
     @Published var errorMessage:    String?
     @Published var currentUser:     User?
+    @Published var username:        String = ""
 
+    private let db = Firestore.firestore()
+
+    // MARK: - Init
     init() {
         checkAuthState()
     }
 
+    // MARK: - Auth state listener
     private func checkAuthState() {
         Auth.auth().addStateDidChangeListener { [weak self] _, user in
             guard let self else { return }
@@ -24,34 +31,110 @@ final class AuthViewModel: ObservableObject {
                 self.currentUser     = user
                 self.isAuthenticated = user != nil
                 self.isCheckingAuth  = false
+                if let user {
+                    await self.fetchUsername(userID: user.uid)
+                }
             }
         }
     }
 
-    func signUp(email: String, password: String, confirmPassword: String) async {
-        guard !email.isEmpty, !password.isEmpty else {
-            errorMessage = "Compila tutti i campi."; return
-        }
-        guard password == confirmPassword else {
-            errorMessage = "Le password non coincidono."; return
-        }
-        guard password.count >= 6 else {
-            errorMessage = "La password deve avere almeno 6 caratteri."; return
-        }
-        isLoading = true; errorMessage = nil
-        defer { isLoading = false }
+    // MARK: - Fetch username
+    func fetchUsername(userID: String) async {
         do {
-            let result      = try await Auth.auth().createUser(withEmail: email, password: password)
-            currentUser     = result.user
-            isAuthenticated = true
-        } catch { errorMessage = mapFirebaseError(error) }
+            let doc = try await db
+                .collection("users")
+                .document(userID)
+                .collection("profile")
+                .document("info")
+                .getDocument()
+            username = doc.data()?["username"] as? String ?? ""
+        } catch {
+            username = ""
+        }
     }
 
+    // MARK: - Verifica unicità username
+    func isUsernameAvailable(_ username: String) async -> Bool {
+        let trimmed = username.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !trimmed.isEmpty else { return false }
+        let doc = try? await db
+            .collection("usernames")
+            .document(trimmed)
+            .getDocument()
+        return !(doc?.exists ?? false)
+    }
+
+    // MARK: - Salva username su Firestore
+    private func saveUsername(_ username: String, userID: String) async throws {
+        let trimmed = username.trimmingCharacters(in: .whitespaces).lowercased()
+
+        // Salva nella collezione usernames per garantire unicità
+        try await db.collection("usernames").document(trimmed).setData([
+            "userID": userID
+        ])
+
+        // Salva nel profilo utente
+        try await db
+            .collection("users")
+            .document(userID)
+            .collection("profile")
+            .document("info")
+            .setData([
+                "username": trimmed,
+                "email":    Auth.auth().currentUser?.email ?? ""
+            ])
+
+        self.username = trimmed
+    }
+
+    // MARK: - Sign Up
+    func signUp(email: String, password: String, confirmPassword: String, username: String) async {
+        guard !email.isEmpty, !password.isEmpty, !username.isEmpty else {
+            errorMessage = "Compila tutti i campi."
+            return
+        }
+        guard password == confirmPassword else {
+            errorMessage = "Le password non coincidono."
+            return
+        }
+        guard password.count >= 6 else {
+            errorMessage = "La password deve avere almeno 6 caratteri."
+            return
+        }
+        guard username.count >= 3 else {
+            errorMessage = "Il nome utente deve avere almeno 3 caratteri."
+            return
+        }
+
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        // Verifica unicità username
+        let available = await isUsernameAvailable(username)
+        guard available else {
+            errorMessage = "Nome utente già in uso. Scegline un altro."
+            return
+        }
+
+        do {
+            let result = try await Auth.auth().createUser(withEmail: email, password: password)
+            try await saveUsername(username, userID: result.user.uid)
+            currentUser     = result.user
+            isAuthenticated = true
+        } catch {
+            errorMessage = mapFirebaseError(error)
+        }
+    }
+
+    // MARK: - Login
     func login(email: String, password: String) async {
         guard !email.isEmpty, !password.isEmpty else {
-            errorMessage = "Compila tutti i campi."; return
+            errorMessage = "Compila tutti i campi."
+            return
         }
-        isLoading = true; errorMessage = nil
+        isLoading = true
+        errorMessage = nil
         defer { isLoading = false }
         do {
             let result      = try await Auth.auth().signIn(withEmail: email, password: password)
@@ -60,11 +143,14 @@ final class AuthViewModel: ObservableObject {
         } catch { errorMessage = mapFirebaseError(error) }
     }
 
+    // MARK: - Reset Password
     func resetPassword(email: String) async {
         guard !email.isEmpty else {
-            errorMessage = "Inserisci la tua email."; return
+            errorMessage = "Inserisci la tua email."
+            return
         }
-        isLoading = true; errorMessage = nil
+        isLoading = true
+        errorMessage = nil
         defer { isLoading = false }
         do {
             try await Auth.auth().sendPasswordReset(withEmail: email)
@@ -72,8 +158,10 @@ final class AuthViewModel: ObservableObject {
         } catch { errorMessage = mapFirebaseError(error) }
     }
 
+    // MARK: - Google Sign In
     func signInWithGoogle() async {
-        isLoading = true; errorMessage = nil
+        isLoading = true
+        errorMessage = nil
         defer { isLoading = false }
         do {
             guard
@@ -83,31 +171,44 @@ final class AuthViewModel: ObservableObject {
 
             let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: rootVC)
             guard let idToken = result.user.idToken?.tokenString else {
-                errorMessage = "Token Google non disponibile."; return
+                errorMessage = "Token Google non disponibile."
+                return
             }
-            let credential  = GoogleAuthProvider.credential(
-                withIDToken:   idToken,
-                accessToken:   result.user.accessToken.tokenString
+            let credential = GoogleAuthProvider.credential(
+                withIDToken:  idToken,
+                accessToken:  result.user.accessToken.tokenString
             )
             let authResult  = try await Auth.auth().signIn(with: credential)
             currentUser     = authResult.user
+
+            // Per Google Sign-In: se è il primo accesso, chiediamo username dopo
+            await fetchUsername(userID: authResult.user.uid)
             isAuthenticated = true
         } catch { errorMessage = mapFirebaseError(error) }
     }
 
+    // MARK: - Logout
     func logout() {
         do {
             try Auth.auth().signOut()
             GIDSignIn.sharedInstance.signOut()
             currentUser     = nil
             isAuthenticated = false
+            username        = ""
         } catch {
             errorMessage = "Errore durante il logout: \(error.localizedDescription)"
         }
     }
 
+    // MARK: - Helpers
     var displayName: String {
-        currentUser?.displayName ?? currentUser?.email ?? "Utente"
+        username.isEmpty
+            ? (currentUser?.email ?? "Utente")
+            : username
+    }
+
+    var avatarLetter: String {
+        String(displayName.prefix(1)).uppercased()
     }
 
     private func mapFirebaseError(_ error: Error) -> String {
