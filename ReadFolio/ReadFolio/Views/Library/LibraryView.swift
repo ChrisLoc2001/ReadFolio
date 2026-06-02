@@ -1,21 +1,10 @@
-//
-//  LibraryView.swift
-//  ReadFolio
-//
-//  Created by Christian Lo Conte on 31/05/2026.
-//
-
-
 import SwiftUI
-import SwiftData
 
 struct LibraryView: View {
-    @Environment(\.modelContext) private var context
-    @State private var vm = LibraryViewModel()
+    @State private var vm             = LibraryViewModel()
     @State private var showingAddEdit = false
-    @State private var showingFilters = false
-    @State private var itemToEdit: ReadingItem? = nil
-    @State private var itemToDelete: ReadingItem? = nil
+    @State private var itemToEdit:    ReadingItem? = nil
+    @State private var itemToDelete:  ReadingItem? = nil
     @State private var showDeleteAlert = false
 
     var body: some View {
@@ -39,29 +28,17 @@ struct LibraryView: View {
             .sheet(item: $itemToEdit) { item in
                 AddEditView(item: item) { await vm.load() }
             }
-            .sheet(isPresented: $showingFilters) {
-                FilterSortView(
-                    selectedType: $vm.selectedType,
-                    selectedStatus: $vm.selectedStatus,
-                    sortOption: $vm.sortOption,
-                    sortAscending: $vm.sortAscending,
-                    showFavoritesOnly: $vm.showFavoritesOnly
-                )
-            }
             .alert("Eliminare questo elemento?", isPresented: $showDeleteAlert) {
                 Button("Elimina", role: .destructive) {
-                    if let item = itemToDelete { vm.delete(item) }
+                    if let item = itemToDelete {
+                        Task { await vm.delete(item) }
+                    }
                 }
                 Button("Annulla", role: .cancel) {}
             }
         }
-        .task {
-            vm.setup(context: context)
-            await vm.load()
-        }
+        .task { await vm.load() }
     }
-
-    // MARK: - List
 
     private var itemList: some View {
         List {
@@ -69,9 +46,7 @@ struct LibraryView: View {
                 NavigationLink(destination: ItemDetailView(item: item)) {
                     LibraryItemRow(item: item)
                 }
-                .contextMenu {
-                    contextMenuItems(for: item)
-                }
+                .contextMenu { contextMenuItems(for: item) }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
                         itemToDelete = item
@@ -79,20 +54,17 @@ struct LibraryView: View {
                     } label: {
                         Label("Elimina", systemImage: "trash")
                     }
-
-                    Button {
-                        itemToEdit = item
-                    } label: {
+                    Button { itemToEdit = item } label: {
                         Label("Modifica", systemImage: "pencil")
                     }
                     .tint(.blue)
                 }
                 .swipeActions(edge: .leading) {
                     Button {
-                        vm.toggleFavorite(item)
+                        Task { await vm.toggleFavorite(item) }
                     } label: {
                         Label(
-                            item.isFavorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti",
+                            item.isFavorite ? "Rimuovi" : "Preferito",
                             systemImage: item.isFavorite ? "star.slash" : "star.fill"
                         )
                     }
@@ -103,8 +75,6 @@ struct LibraryView: View {
         .listStyle(.insetGrouped)
         .animation(.default, value: vm.filteredItems.map { $0.id })
     }
-
-    // MARK: - Empty State
 
     private var emptyState: some View {
         VStack(spacing: 16) {
@@ -127,61 +97,35 @@ struct LibraryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Toolbar
-
     @ToolbarContentBuilder
     private var toolbarItems: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
-            Button {
-                showingAddEdit = true
-            } label: {
+            Button { showingAddEdit = true } label: {
                 Image(systemName: "plus")
             }
             .keyboardShortcut("n", modifiers: .command)
-            .accessibilityLabel("Aggiungi elemento")
-        }
-
-        ToolbarItem(placement: .topBarLeading) {
-            Button {
-                showingFilters = true
-            } label: {
-                Image(systemName: hasActiveFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-            }
-            .accessibilityLabel("Filtri e ordinamento")
         }
     }
-
-    private var hasActiveFilters: Bool {
-        vm.selectedType != nil || vm.selectedStatus != nil || vm.showFavoritesOnly
-    }
-
-    // MARK: - Context Menu
 
     @ViewBuilder
     private func contextMenuItems(for item: ReadingItem) -> some View {
-        Button {
-            itemToEdit = item
-        } label: {
+        Button { itemToEdit = item } label: {
             Label("Modifica", systemImage: "pencil")
         }
-
         Button {
-            vm.toggleFavorite(item)
+            Task { await vm.toggleFavorite(item) }
         } label: {
             Label(
                 item.isFavorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti",
                 systemImage: item.isFavorite ? "star.slash" : "star.fill"
             )
         }
-
         Button {
-            vm.duplicate(item)
+            Task { await vm.duplicate(item) }
         } label: {
             Label("Duplica", systemImage: "doc.on.doc")
         }
-
         Divider()
-
         Button(role: .destructive) {
             itemToDelete = item
             showDeleteAlert = true

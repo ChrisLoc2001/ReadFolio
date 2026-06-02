@@ -1,67 +1,33 @@
 import SwiftUI
 import Charts
-import SwiftData
 
 struct DashboardView: View {
-    @Environment(\.modelContext) private var context
     @State private var vm = DashboardViewModel()
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 20) {
-                    // MARK: - Stat Cards
                     statsGrid
-
-                    // MARK: - Chart
                     monthlyChart
-
-                    // MARK: - Recenti
                     recentSection
                 }
                 .padding()
             }
             .navigationTitle("Dashboard")
-            .task {
-                vm.setup(context: context)
-                await vm.load()
-            }
+            .task { await vm.load() }
             .refreshable { await vm.load() }
         }
     }
 
-    // MARK: - Stats Grid
-
     private var statsGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            StatCardView(
-                title: "Letti",
-                value: "\(vm.completedCount)",
-                icon: "checkmark.seal.fill",
-                color: .green
-            )
-            StatCardView(
-                title: "In lettura",
-                value: "\(vm.readingCount)",
-                icon: "book.open",
-                color: .orange
-            )
-            StatCardView(
-                title: "Da leggere",
-                value: "\(vm.toReadCount)",
-                icon: "bookmark",
-                color: .blue
-            )
-            StatCardView(
-                title: "Media ⭐",
-                value: vm.formattedAverage,
-                icon: "star.fill",
-                color: .yellow
-            )
+            StatCardView(title: "Letti",      value: "\(vm.completedCount)", icon: "checkmark.seal.fill", color: .green)
+            StatCardView(title: "In lettura", value: "\(vm.readingCount)",   icon: "book.open",           color: .orange)
+            StatCardView(title: "Da leggere", value: "\(vm.toReadCount)",    icon: "bookmark",            color: .blue)
+            StatCardView(title: "Media ⭐",   value: vm.formattedAverage,    icon: "star.fill",           color: .yellow)
         }
     }
-
-    // MARK: - Monthly Chart
 
     private var monthlyChart: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -84,14 +50,11 @@ struct DashboardView: View {
                 }
                 .frame(height: 160)
                 .chartYAxis { AxisMarks(position: .leading) }
-                .accessibilityLabel("Grafico completati per mese")
             }
         }
         .padding()
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
-
-    // MARK: - Recent
 
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -100,9 +63,8 @@ struct DashboardView: View {
                 .accessibilityAddTraits(.isHeader)
 
             if vm.recentItems.isEmpty {
-                Text("Nessun elemento ancora. Aggiungi il primo dalla Libreria!")
+                Text("Nessun elemento ancora.")
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
                     .padding()
             } else {

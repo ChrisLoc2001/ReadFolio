@@ -1,71 +1,102 @@
 import Foundation
-import SwiftData
+import FirebaseFirestore
+import FirebaseAuth
 
 @MainActor
 final class ItemRepository {
-    private let context: ModelContext
-
-    init(context: ModelContext) {
-        self.context = context
+    private let db = Firestore.firestore()
+    private var userID: String {
+        Auth.auth().currentUser?.uid ?? ""
+    }
+    private var itemsCollection: CollectionReference {
+        db.collection("users").document(userID).collection("items")
+    }
+    private var tagsCollection: CollectionReference {
+        db.collection("users").document(userID).collection("tags")
     }
 
-    // MARK: - CRUD
+    // MARK: - CRUD Items
 
-    func insert(_ item: ReadingItem) {
-        item.updatedAt = Date()
-        context.insert(item)
-        save()
+    func insert(_ item: ReadingItem) async throws {
+        var newItem = item
+        newItem.userID    = userID
+        newItem.updatedAt = Date()
+        try itemsCollection.document(newItem.id).setData(from: newItem)
     }
 
-    func delete(_ item: ReadingItem) {
-        context.delete(item)
-        save()
+    func update(_ item: ReadingItem) async throws {
+        var updated = item
+        updated.updatedAt = Date()
+        try itemsCollection.document(item.id).setData(from: updated)
     }
 
-    func duplicate(_ item: ReadingItem) -> ReadingItem {
+    func delete(_ item: ReadingItem) async throws {
+        try await itemsCollection.document(item.id).delete()
+    }
+
+    func duplicate(_ item: ReadingItem) async throws -> ReadingItem {
         let copy = item.duplicate()
-        context.insert(copy)
-        save()
+        try await insert(copy)
         return copy
-    }
-
-    func save() {
-        do {
-            try context.save()
-        } catch {
-            #if DEBUG
-            print("SwiftData save error: \(error)")
-            #endif
-        }
     }
 
     // MARK: - Fetch
 
-    func fetchAll() throws -> [ReadingItem] {
-        let descriptor = FetchDescriptor<ReadingItem>(
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
-        return try context.fetch(descriptor)
+    func fetchAll() async throws -> [ReadingItem] {
+        let snapshot = try await itemsCollection
+            .order(by: "createdAt", descending: true)
+            .getDocuments()
+        return snapshot.documents.compactMap {
+            try? $0.data(as: ReadingItem.self)
+        }
     }
 
-    func fetchFavorites() throws -> [ReadingItem] {
-        let descriptor = FetchDescriptor<ReadingItem>(
-            predicate: #Predicate { $0.isFavorite == true },
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-        return try context.fetch(descriptor)
+    func fetchFavorites() async throws -> [ReadingItem] {
+        let snapshot = try await itemsCollection
+            .whereField("isFavorite", isEqualTo: true)
+            .getDocuments()
+        return snapshot.documents.compactMap {
+            try? $0.data(as: ReadingItem.self)
+        }
     }
 
-    // Filtro in memoria: evita il bug di SwiftData con enum.rawValue nei #Predicate
-    func fetchByStatus(_ status: ReadingStatus) throws -> [ReadingItem] {
-        let all = try fetchAll()
-        return all.filter { $0.status == status }
+    func fetchByStatus(_ status: ReadingStatus) async throws -> [ReadingItem] {
+        let snapshot = try await itemsCollection
+            .whereField("status", isEqualTo: status.rawValue)
+            .getDocuments()
+        return snapshot.documents.compactMap {
+            try? $0.data(as: ReadingItem.self)
+        }
+    }
+
+    // MARK: - Tags
+
+    func fetchTags() async throws -> [Tag] {
+        let snapshot = try await tagsCollection.getDocuments()
+        return snapshot.documents.compactMap {
+            try? $0.data(as: Tag.self)
+        }
+    }
+
+    func resolvedTags(names: [String]) async throws -> [Tag] {
+        let existing = try await fetchTags()
+        var result: [Tag] = []
+        for name in names {
+            if let found = existing.first(where: { $0.name == name }) {
+                result.append(found)
+            } else {
+                let tag = Tag(name: name, userID: userID)
+                try tagsCollection.document(tag.id).setData(from: tag)
+                result.append(tag)
+            }
+        }
+        return result
     }
 
     // MARK: - Statistics
 
-    func countByStatus() throws -> [ReadingStatus: Int] {
-        let all = try fetchAll()
+    func countByStatus() async throws -> [ReadingStatus: Int] {
+        let all = try await fetchAll()
         var result: [ReadingStatus: Int] = [:]
         for status in ReadingStatus.allCases {
             result[status] = all.filter { $0.status == status }.count
@@ -73,25 +104,24 @@ final class ItemRepository {
         return result
     }
 
-    func averageRating() throws -> Double {
-        let all = try fetchAll()
+    func averageRating() async throws -> Double {
+        let all   = try await fetchAll()
         let rated = all.filter { $0.rating > 0 }
         guard !rated.isEmpty else { return 0 }
         return Double(rated.map { $0.rating }.reduce(0, +)) / Double(rated.count)
     }
 
-    /// Elementi completati per mese (ultimi 12 mesi)
-    func completedPerMonth() throws -> [MonthStat] {
-        let all = try fetchAll()
+    func completedPerMonth() async throws -> [MonthStat] {
+        let all       = try await fetchAll()
         let completed = all.filter { $0.status == .completed && $0.endDate != nil }
-
-        let calendar = Calendar.current
-        let now = Date()
+        let calendar  = Calendar.current
+        let now       = Date()
         var stats: [MonthStat] = []
 
         for monthOffset in (0..<12).reversed() {
-            guard let monthDate = calendar.date(byAdding: .month, value: -monthOffset, to: now)
-            else { continue }
+            guard let monthDate = calendar.date(
+                byAdding: .month, value: -monthOffset, to: now
+            ) else { continue }
 
             let comps = calendar.dateComponents([.year, .month], from: monthDate)
             let count = completed.filter { item in
@@ -99,17 +129,21 @@ final class ItemRepository {
                 let ic = calendar.dateComponents([.year, .month], from: end)
                 return ic.year == comps.year && ic.month == comps.month
             }.count
-
             stats.append(MonthStat(date: monthDate, count: count))
         }
-
         return stats
+    }
+
+    // MARK: - Export
+
+    func fetchAllForExport() async throws -> [ReadingItem] {
+        try await fetchAll()
     }
 }
 
 struct MonthStat: Identifiable {
-    let id = UUID()
-    let date: Date
+    let id    = UUID()
+    let date:  Date
     let count: Int
 
     var label: String {

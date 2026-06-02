@@ -1,16 +1,20 @@
 import Foundation
-import SwiftData
 
-@Model
-final class Tag {
-    @Attribute(.unique) var name: String
+struct Tag: Identifiable, Codable, Hashable {
+    var id: String
+    var name: String
     var colorHex: String
+    var userID: String
 
-    @Relationship(inverse: \ReadingItem.tags)
-    var items: [ReadingItem] = []
-
-    init(name: String, colorHex: String = "#6366F1") {
-        self.name = name
+    init(
+        id: String = UUID().uuidString,
+        name: String,
+        colorHex: String = "#6366F1",
+        userID: String = ""
+    ) {
+        self.id       = id
+        self.name     = name
         self.colorHex = colorHex
+        self.userID   = userID
     }
 }

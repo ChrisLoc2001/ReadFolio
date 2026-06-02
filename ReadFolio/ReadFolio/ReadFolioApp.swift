@@ -1,27 +1,25 @@
 import SwiftUI
-import SwiftData
 import FirebaseCore
+import FirebaseFirestore
 import GoogleSignIn
+import FirebaseAuth
 
 @main
 struct ReadfolioApp: App {
-    let container: ModelContainer
     @StateObject private var authVM = AuthViewModel()
 
     init() {
         FirebaseApp.configure()
 
-        let schema = Schema([ReadingItem.self, Tag.self])
-        do {
-            let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-            container = try ModelContainer(for: schema, configurations: [config])
-        } catch {
-            #if DEBUG
-            print("ModelContainer error: \(error)")
-            #endif
-            let fallback = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-            container = (try? ModelContainer(for: schema, configurations: [fallback]))
-                ?? { fatalError("ModelContainer irrecuperabile: \(error)") }()
+        // Abilita cache offline Firestore
+        let settings = FirestoreSettings()
+        settings.cacheSettings = PersistentCacheSettings()
+        Firestore.firestore().settings = settings
+
+        // Configura Google Sign-In
+        if let clientID = FirebaseApp.app()?.options.clientID {
+            let config = GIDConfiguration(clientID: clientID)
+            GIDSignIn.sharedInstance.configuration = config
         }
     }
 
@@ -30,7 +28,6 @@ struct ReadfolioApp: App {
             RootView()
                 .environmentObject(authVM)
         }
-        .modelContainer(container)
 
         #if os(macOS)
         Settings {
@@ -40,8 +37,6 @@ struct ReadfolioApp: App {
         #endif
     }
 }
-
-// MARK: - RootView
 
 struct RootView: View {
     @EnvironmentObject private var authVM: AuthViewModel

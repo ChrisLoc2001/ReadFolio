@@ -7,7 +7,6 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @EnvironmentObject private var authVM: AuthViewModel
 
-
     @State private var googleBooksKey = KeychainHelper.load(for: "googleBooksAPIKey")
     @State private var comicVineKey   = KeychainHelper.load(for: "comicVineAPIKey")
 
@@ -132,25 +131,25 @@ struct SettingsView: View {
     // MARK: - Export
 
     private func exportData() {
-        do {
-            let repo  = ItemRepository(context: context)
-            let items = try repo.fetchAll()
-            let data  = try ExportImportService.exportJSON(items: items)
-
-            let filename = "readfolio_export_\(Date().ISO8601Format()).json"
-            let url = FileManager.default.temporaryDirectory
-                        .appendingPathComponent(filename)
-            try data.write(to: url)
-
-            feedbackMessage = "Esportati \(items.count) elementi.\nFile: \(url.lastPathComponent)"
-        } catch {
-            feedbackMessage = "Errore durante l'esportazione: \(error.localizedDescription)"
+        Task {
+            do {
+                let repo  = ItemRepository()
+                let items = try await repo.fetchAll()
+                let data  = try ExportImportService.exportJSON(items: items)
+                let filename = "readfolio_export_\(Date().ISO8601Format()).json"
+                let url = FileManager.default.temporaryDirectory
+                            .appendingPathComponent(filename)
+                try data.write(to: url)
+                feedbackMessage = "Esportati \(items.count) elementi.\nFile: \(url.lastPathComponent)"
+            } catch {
+                feedbackMessage = "Errore: \(error.localizedDescription)"
+            }
+            showingFeedback = true
         }
-        showingFeedback = true
     }
 
     // MARK: - Import
-
+    
     private func importData(result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
@@ -161,19 +160,25 @@ struct SettingsView: View {
                 return
             }
             defer { url.stopAccessingSecurityScopedResource() }
-
-            do {
-                let data  = try Data(contentsOf: url)
-                let count = try ExportImportService.importJSON(data: data, context: context)
-                feedbackMessage = "Importati \(count) elementi con successo."
-            } catch {
-                feedbackMessage = "Errore durante l'importazione: \(error.localizedDescription)"
+            Task {
+                do {
+                    let data  = try Data(contentsOf: url)
+                    let userID = authVM.currentUser?.uid ?? ""
+                    let items = try ExportImportService.importJSON(data: data, userID: userID)
+                    let repo  = ItemRepository()
+                    for item in items {
+                        try await repo.insert(item)
+                    }
+                    feedbackMessage = "Importati \(items.count) elementi con successo."
+                } catch {
+                    feedbackMessage = "Errore: \(error.localizedDescription)"
+                }
+                showingFeedback = true
             }
-
         case .failure(let error):
             feedbackMessage = "Impossibile aprire il file: \(error.localizedDescription)"
+            showingFeedback = true
         }
-        showingFeedback = true
     }
 
     // MARK: - App info
