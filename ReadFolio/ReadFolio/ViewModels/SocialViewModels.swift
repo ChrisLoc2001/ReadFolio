@@ -61,6 +61,26 @@ final class PublicProfileViewModel {
         }
     }
 
+    /// Etichetta mostrata quando la libreria non è accessibile.
+    var privateLibraryLabel: String {
+        followStatus == .pending ? "Richiesta in attesa di approvazione" : "Profilo privato"
+    }
+
+    /// Icona corrispondente allo stato di blocco della libreria.
+    var privateLibraryIcon: String {
+        followStatus == .pending ? "clock.fill" : "lock.fill"
+    }
+
+    /// Testo di supporto sotto la sezione libreria bloccata.
+    var privateLibraryFooter: String {
+        switch followStatus {
+        case .pending:
+            return "La tua richiesta è in attesa di approvazione. Potrai vedere la libreria una volta accettata."
+        default:
+            return "Segui questo utente per vedere la sua libreria. Le richieste vengono approvate dal proprietario."
+        }
+    }
+
     func load() async {
         isLoading = true
         defer { isLoading = false }

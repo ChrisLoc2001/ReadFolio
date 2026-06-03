@@ -32,10 +32,10 @@ struct PublicProfileView: View {
                 librarySection
             } else {
                 Section {
-                    Label("Profilo privato", systemImage: "lock.fill")
+                    Label(vm.privateLibraryLabel, systemImage: vm.privateLibraryIcon)
                         .foregroundStyle(.secondary)
                 } footer: {
-                    Text("Segui questo utente per vedere la sua libreria. Le richieste vengono approvate dal proprietario.")
+                    Text(vm.privateLibraryFooter)
                 }
             }
         }
