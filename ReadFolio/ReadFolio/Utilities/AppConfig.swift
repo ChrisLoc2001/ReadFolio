@@ -5,7 +5,11 @@ import Foundation
 /// Le chiavi vivono in `Secrets.xcconfig` (non versionato) → vengono iniettate in
 /// `Info.plist` tramite `ReadFolio.xcconfig`. Sia i servizi di rete sia la UI leggono
 /// da qui, così l'app ha un solo concetto di "chiave configurata".
-enum AppConfig {
+// `nonisolated`: AppConfig legge solo da Bundle.main (thread-safe) e deve essere
+// raggiungibile sia dalla UI (@MainActor) sia dai servizi `actor`. Senza questo,
+// con SWIFT_APPROACHABLE_CONCURRENCY il tipo verrebbe isolato a @MainActor e
+// non sarebbe accessibile dall'interno degli actor di rete.
+nonisolated enum AppConfig {
 
     /// Placeholder usato in `Secrets.xcconfig.example`. Una chiave uguale a questo
     /// valore (o vuota) è considerata "non configurata".
