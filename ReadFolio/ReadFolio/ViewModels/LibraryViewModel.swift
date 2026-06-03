@@ -60,7 +60,10 @@ final class LibraryViewModel {
             }
             return sortAscending ? result : !result
         }
-        return items
+        // Preferiti in cima, mantenendo l'ordinamento scelto all'interno di ogni gruppo.
+        let favorites = items.filter { $0.isFavorite }
+        let others    = items.filter { !$0.isFavorite }
+        return favorites + others
     }
 
     func delete(_ item: ReadingItem) async {

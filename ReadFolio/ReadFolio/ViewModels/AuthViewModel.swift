@@ -15,8 +15,12 @@ final class AuthViewModel: ObservableObject {
     @Published var errorMessage:    String?
     @Published var currentUser:     User?
     @Published var username:        String = ""
+    /// True quando l'utente è autenticato ma non ha ancora completato la scelta
+    /// di privacy del profilo (primo accesso o account creato prima del social).
+    @Published var needsProfileSetup: Bool = false
 
-    private let db = Firestore.firestore()
+    private let db     = Firestore.firestore()
+    private let social = SocialRepository()
 
     // MARK: - Init
     init() {
@@ -32,7 +36,7 @@ final class AuthViewModel: ObservableObject {
                 self.isAuthenticated = user != nil
                 self.isCheckingAuth  = false
                 if let user {
-                    await self.fetchUsername(userID: user.uid)
+                    await self.refreshProfileState(userID: user.uid)
                 }
             }
         }
@@ -50,6 +54,57 @@ final class AuthViewModel: ObservableObject {
             username = doc.data()?["username"] as? String ?? ""
         } catch {
             username = ""
+        }
+    }
+
+    // MARK: - Stato profilo (username + setup privacy)
+    /// Carica lo username e determina se serve completare il setup del profilo
+    /// (assenza del profilo pubblico = privacy non ancora scelta).
+    func refreshProfileState(userID: String) async {
+        await fetchUsername(userID: userID)
+        let profile = try? await social.myPublicProfile()
+        needsProfileSetup = (profile == nil)
+    }
+
+    /// Completa il setup del profilo: riserva lo username se mancante (es. accesso
+    /// con Google) e crea il profilo pubblico con le preferenze di privacy.
+    /// Ritorna true se il setup è andato a buon fine.
+    func completeProfileSetup(username chosen: String,
+                              displayName: String,
+                              isPublic: Bool,
+                              followApprovalRequired: Bool) async -> Bool {
+        guard let uid = currentUser?.uid else { return false }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            var finalUsername = username
+            if finalUsername.isEmpty {
+                let trimmed = chosen.trimmingCharacters(in: .whitespaces).lowercased()
+                guard trimmed.count >= 3 else {
+                    errorMessage = "Il nome utente deve avere almeno 3 caratteri."
+                    return false
+                }
+                guard await isUsernameAvailable(trimmed) else {
+                    errorMessage = "Nome utente già in uso. Scegline un altro."
+                    return false
+                }
+                try await saveUsername(trimmed, userID: uid)
+                finalUsername = trimmed
+            }
+
+            try await social.upsertMyPublicProfile(
+                username:               finalUsername,
+                displayName:            displayName.trimmingCharacters(in: .whitespaces),
+                isPublic:               isPublic,
+                followApprovalRequired: followApprovalRequired
+            )
+            needsProfileSetup = false
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
         }
     }
 
@@ -120,8 +175,9 @@ final class AuthViewModel: ObservableObject {
         do {
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
             try await saveUsername(username, userID: result.user.uid)
-            currentUser     = result.user
-            isAuthenticated = true
+            currentUser       = result.user
+            needsProfileSetup = true   // dovrà scegliere la privacy del profilo
+            isAuthenticated   = true
         } catch {
             errorMessage = mapFirebaseError(error)
         }
@@ -192,9 +248,10 @@ final class AuthViewModel: ObservableObject {
         do {
             try Auth.auth().signOut()
             GIDSignIn.sharedInstance.signOut()
-            currentUser     = nil
-            isAuthenticated = false
-            username        = ""
+            currentUser       = nil
+            isAuthenticated   = false
+            needsProfileSetup = false
+            username          = ""
         } catch {
             errorMessage = "Errore durante il logout: \(error.localizedDescription)"
         }
@@ -220,6 +277,9 @@ final class AuthViewModel: ObservableObject {
             if !username.isEmpty {
                 try await db.collection("usernames").document(username).delete()
             }
+
+            // Rimuove il profilo pubblico così sparisce dalla ricerca.
+            try? await db.collection("publicProfiles").document(user.uid).delete()
 
             try await user.delete()
 

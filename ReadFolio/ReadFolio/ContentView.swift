@@ -21,6 +21,10 @@ struct ContentView: View {
                 .tabItem { Label("Libreria", systemImage: "books.vertical.fill") }
                 .tag(AppTab.library)
 
+            CommunityView()
+                .tabItem { Label("Community", systemImage: "person.2.fill") }
+                .tag(AppTab.community)
+
             SettingsView()
                 .tabItem { Label("Impostazioni", systemImage: "gearshape.fill") }
                 .tag(AppTab.settings)
@@ -33,19 +37,21 @@ struct ContentView: View {
         switch tab {
         case .dashboard: DashboardView()
         case .library:   LibraryView()
+        case .community: CommunityView()
         case .settings:  SettingsView()
         }
     }
 }
 
 enum AppTab: String, CaseIterable, Identifiable {
-    case dashboard, library, settings
+    case dashboard, library, community, settings
     var id: String { rawValue }
 
     var label: String {
         switch self {
         case .dashboard: return "Dashboard"
         case .library:   return "Libreria"
+        case .community: return "Community"
         case .settings:  return "Impostazioni"
         }
     }
@@ -54,6 +60,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         switch self {
         case .dashboard: return "chart.bar.fill"
         case .library:   return "books.vertical.fill"
+        case .community: return "person.2.fill"
         case .settings:  return "gearshape.fill"
         }
     }

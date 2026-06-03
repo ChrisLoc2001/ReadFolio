@@ -47,11 +47,16 @@ struct RootView: View {
                 ProgressView("Caricamento…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if authVM.isAuthenticated {
-                ContentView()
+                if authVM.needsProfileSetup {
+                    ProfileSetupView()
+                } else {
+                    ContentView()
+                }
             } else {
                 AuthView()
             }
         }
         .animation(.easeInOut, value: authVM.isAuthenticated)
+        .animation(.easeInOut, value: authVM.needsProfileSetup)
     }
 }

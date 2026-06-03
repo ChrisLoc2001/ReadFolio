@@ -2,11 +2,18 @@ rules_version = '2';
 
 // Regole di sicurezza Firestore per ReadFolio.
 //
-// Principio: ogni utente accede SOLO ai propri dati. La collezione globale
-// `usernames` serve solo a garantire l'unicità del nome utente.
+// Principio: ogni utente possiede e gestisce SOLO i propri dati. Le funzionalità
+// social aprono in modo CONTROLLATO la lettura della libreria altrui:
+//   - sempre per il proprietario;
+//   - per chiunque se il profilo è pubblico;
+//   - per i soli follower "accepted" se il profilo è privato;
+//   - MAI per chi è stato bloccato.
+//
+// L'autorizzazione vera vive qui, non nell'app: il client può solo provare a
+// leggere/scrivere, è il server a concedere o negare.
 //
 // Deploy:  firebase deploy --only firestore:rules
-// Test:    firebase emulators:start --only firestore  (consigliato per i test di integrazione)
+// Test:    firebase emulators:start --only firestore
 //
 // NOTA: abilitare anche Firebase App Check per bloccare client non autentici.
 
@@ -21,19 +28,79 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Dati personali dell'utente: libreria, tag, profilo.
+    // Il profilo pubblico esiste ed è marcato pubblico.
+    function profileIsPublic(userId) {
+      return exists(/databases/$(database)/documents/publicProfiles/$(userId))
+        && get(/databases/$(database)/documents/publicProfiles/$(userId)).data.isPublic == true;
+    }
+
+    // Il profilo richiede approvazione manuale dei follower.
+    function requiresApproval(userId) {
+      return get(/databases/$(database)/documents/publicProfiles/$(userId)).data.followApprovalRequired == true;
+    }
+
+    // Chi richiede è un follower con stato "accepted".
+    function isAcceptedFollower(userId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(userId)/followers/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(userId)/followers/$(request.auth.uid)).data.status == 'accepted';
+    }
+
+    // Chi richiede è stato bloccato dal proprietario.
+    function isBlockedBy(userId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(userId)/blocked/$(request.auth.uid));
+    }
+
+    // Profili pubblici: discovery + privacy. NESSUN dato sensibile (no email).
+    // Leggibili da ogni utente autenticato; scrivibili solo dal proprietario.
+    match /publicProfiles/{userId} {
+      allow read:  if isSignedIn();
+      allow write: if isOwner(userId);
+    }
+
+    // Sottoalbero personale dell'utente.
     match /users/{userId} {
       allow read, write: if isOwner(userId);
 
+      // Libreria: oltre al proprietario, leggibile se il profilo è pubblico o se
+      // sei follower accettato — e mai se sei bloccato. Scrittura solo proprietario.
+      match /items/{itemId} {
+        allow read: if isOwner(userId)
+                     || ( !isBlockedBy(userId)
+                          && (profileIsPublic(userId) || isAcceptedFollower(userId)) );
+        allow write: if isOwner(userId);
+      }
+
+      // Follower: il proprietario gestisce la lista (approva/rimuove); un altro
+      // utente può creare/eliminare SOLO il proprio record (seguire/smettere).
+      // Se il profilo richiede approvazione il record nasce 'pending'; non si può
+      // auto-promuovere ad 'accepted' (update riservato al proprietario).
+      match /followers/{followerId} {
+        allow read:   if isOwner(userId) || isOwner(followerId);
+        allow create: if isOwner(followerId)
+                       && !isBlockedBy(userId)
+                       && ( (requiresApproval(userId)  && request.resource.data.status == 'pending')
+                            || (!requiresApproval(userId) && request.resource.data.status == 'accepted') );
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId) || isOwner(followerId);
+      }
+
+      // Seguiti e bloccati: dati privati nel proprio sottoalbero.
+      match /following/{targetId} {
+        allow read, write: if isOwner(userId);
+      }
+      match /blocked/{blockedId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Tutto il resto (profilo privato con email, tag) resta solo del proprietario.
       match /{document=**} {
         allow read, write: if isOwner(userId);
       }
     }
 
     // Riserva globale degli username (unicità).
-    // - Lettura: consentita agli utenti autenticati (serve per il check di disponibilità).
-    // - Creazione: solo se il documento NON esiste già e l'utente registra il proprio uid.
-    // - Modifica/eliminazione: solo il proprietario della riserva.
     match /usernames/{username} {
       allow read: if isSignedIn();
       allow create: if isSignedIn()

@@ -11,6 +11,7 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 accountHeader
                 Form {
+                    socialSection
                     infoSection
                     logoutSection
                     dangerZoneSection
@@ -58,6 +59,23 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
         .background(.regularMaterial)
+    }
+
+    // MARK: - Social
+
+    private var socialSection: some View {
+        Section("Social") {
+            NavigationLink {
+                PrivacySettingsView()
+            } label: {
+                Label("Privacy del profilo", systemImage: "lock.shield")
+            }
+            NavigationLink {
+                BlockedUsersView()
+            } label: {
+                Label("Utenti bloccati", systemImage: "hand.raised")
+            }
+        }
     }
 
     // MARK: - Info
