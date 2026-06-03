@@ -1,19 +1,14 @@
-//
-//  CoverImageView.swift
-//  ReadFolio
-//
-//  Created by Christian Lo Conte on 31/05/2026.
-//
-
-
 import SwiftUI
 
+// Cache in-memory per URL remoti (separata da quella per dati locali).
+private let remoteImageCache = NSCache<NSString, PlatformImage>()
+
 struct CoverImageView: View {
-    /// Immagine locale appena scelta (anteprima prima dell'upload). Ha priorità sull'URL.
     let data: Data?
-    /// URL della copertina su Firebase Storage.
     var url: String? = nil
     let size: CGFloat
+
+    @State private var downloaded: PlatformImage? = nil
 
     init(data: Data?, url: String? = nil, size: CGFloat) {
         self.data = data
@@ -23,23 +18,10 @@ struct CoverImageView: View {
 
     var body: some View {
         Group {
-            if let data, let image = platformImage(from: data) {
-                image
-                    .resizable()
-                    .scaledToFill()
-            } else if let url, let remote = URL(string: url) {
-                AsyncImage(url: remote) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    case .empty:
-                        placeholder.overlay { ProgressView() }
-                    case .failure:
-                        placeholder
-                    @unknown default:
-                        placeholder
-                    }
-                }
+            if let data, let image = localImage(from: data) {
+                image.resizable().scaledToFill()
+            } else if let img = downloaded {
+                platformImage(img).resizable().scaledToFill()
             } else {
                 placeholder
             }
@@ -47,7 +29,12 @@ struct CoverImageView: View {
         .frame(width: size, height: size * 1.4)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
         .accessibilityHidden(true)
+        .task(id: url) {
+            await loadRemoteImage()
+        }
     }
+
+    // MARK: - Private
 
     private var placeholder: some View {
         RoundedRectangle(cornerRadius: cornerRadius)
@@ -61,12 +48,33 @@ struct CoverImageView: View {
 
     private var cornerRadius: CGFloat { size * 0.1 }
 
-    private func platformImage(from data: Data) -> Image? {
-        guard let decoded = CoverImageCache.image(for: data) else { return nil }
+    private func localImage(from data: Data) -> Image? {
+        guard let img = CoverImageCache.image(for: data) else { return nil }
+        return platformImage(img)
+    }
+
+    private func platformImage(_ img: PlatformImage) -> Image {
         #if canImport(UIKit)
-        return Image(uiImage: decoded)
+        return Image(uiImage: img)
         #elseif canImport(AppKit)
-        return Image(nsImage: decoded)
+        return Image(nsImage: img)
         #endif
+    }
+
+    private func loadRemoteImage() async {
+        guard data == nil, let urlString = url, let remote = URL(string: urlString) else { return }
+
+        // Controlla la cache prima di scaricare.
+        if let cached = remoteImageCache.object(forKey: urlString as NSString) {
+            downloaded = cached
+            return
+        }
+
+        guard let (imageData, response) = try? await URLSession.shared.data(from: remote),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let img = PlatformImage(data: imageData) else { return }
+
+        remoteImageCache.setObject(img, forKey: urlString as NSString)
+        downloaded = img
     }
 }
