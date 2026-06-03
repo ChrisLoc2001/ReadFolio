@@ -19,12 +19,25 @@ struct ReadingItem: Identifiable, Codable, Hashable {
     var notes: String
     var genre: String
     var tags: [String]
-    var coverImageData: Data?
+    /// Copertina su Firebase Storage (download URL). È ciò che viene persistito.
+    var coverImageURL: String?
+    /// Copertina locale appena scelta dall'utente, NON ancora caricata.
+    /// Transitoria: esclusa da Codable per non finire dentro il documento Firestore
+    /// (evita il limite di 1 MiB e il download di blob ad ogni fetch).
+    var coverImageData: Data? = nil
     var openLibraryKey: String?
     var isbn: String?
     var createdAt: Date
     var updatedAt: Date
     var userID: String
+
+    // coverImageData è volutamente assente: non viene serializzato su Firestore.
+    private enum CodingKeys: String, CodingKey {
+        case id, title, contentType, author, illustrator, publisher, volume,
+             issueNumber, chapter, edition, status, rating, isFavorite,
+             startDate, endDate, notes, genre, tags, coverImageURL,
+             openLibraryKey, isbn, createdAt, updatedAt, userID
+    }
 
     init(
         id: String = UUID().uuidString,
@@ -45,6 +58,7 @@ struct ReadingItem: Identifiable, Codable, Hashable {
         notes: String = "",
         genre: String = "",
         tags: [String] = [],
+        coverImageURL: String? = nil,
         coverImageData: Data? = nil,
         openLibraryKey: String? = nil,
         isbn: String? = nil,
@@ -68,6 +82,7 @@ struct ReadingItem: Identifiable, Codable, Hashable {
         self.notes         = notes
         self.genre         = genre
         self.tags          = tags
+        self.coverImageURL  = coverImageURL
         self.coverImageData = coverImageData
         self.openLibraryKey = openLibraryKey
         self.isbn          = isbn
@@ -93,6 +108,7 @@ struct ReadingItem: Identifiable, Codable, Hashable {
             notes:         notes,
             genre:         genre,
             tags:          tags,
+            coverImageURL: coverImageURL,
             coverImageData: coverImageData,
             openLibraryKey: openLibraryKey,
             isbn:          isbn,

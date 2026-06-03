@@ -200,6 +200,43 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Elimina account
+    // Richiesto dalle Linee Guida App Store (5.1.1 v): un'app che crea account
+    // deve permettere all'utente di eliminarlo dall'app, dati inclusi.
+    //
+    // Ordine: prima si cancellano i dati Firestore (mentre l'utente è ancora
+    // autenticato e le Security Rules lo permettono), poi l'account Auth.
+    // `deleteAllUserData()` è idempotente, quindi un secondo tentativo dopo un
+    // re-login (necessario se Firebase richiede un accesso recente) è sicuro.
+    func deleteAccount() async {
+        guard let user = Auth.auth().currentUser else { return }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            try await ItemRepository().deleteAllUserData()
+
+            if !username.isEmpty {
+                try await db.collection("usernames").document(username).delete()
+            }
+
+            try await user.delete()
+
+            GIDSignIn.sharedInstance.signOut()
+            currentUser     = nil
+            isAuthenticated = false
+            username        = ""
+        } catch {
+            let code = (error as NSError).code
+            if code == AuthErrorCode.requiresRecentLogin.rawValue {
+                errorMessage = "Per motivi di sicurezza devi aver effettuato l'accesso di recente. Esci, rientra e riprova a eliminare l'account."
+            } else {
+                errorMessage = mapFirebaseError(error)
+            }
+        }
+    }
+
     // MARK: - Helpers
     var displayName: String {
         username.isEmpty

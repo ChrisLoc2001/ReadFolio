@@ -59,13 +59,14 @@ struct AddEditView: View {
             HStack {
                 Spacer()
                 VStack(spacing: 8) {
-                    CoverImageView(data: vm.coverImageData, size: 100).shadow(radius: 3)
+                    CoverImageView(data: vm.coverImageData, url: vm.coverImageURL, size: 100)
+                        .shadow(radius: 3)
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
                         Label("Scegli copertina", systemImage: "photo").font(.caption)
                     }
                     .buttonStyle(.borderless)
-                    if vm.coverImageData != nil {
-                        Button("Rimuovi", role: .destructive) { vm.coverImageData = nil }
+                    if vm.coverImageData != nil || vm.coverImageURL != nil {
+                        Button("Rimuovi", role: .destructive) { vm.removeCover() }
                             .font(.caption).buttonStyle(.borderless)
                     }
                 }

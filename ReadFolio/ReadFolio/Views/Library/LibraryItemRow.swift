@@ -13,7 +13,7 @@ struct LibraryItemRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            CoverImageView(data: item.coverImageData, size: 50)
+            CoverImageView(data: item.coverImageData, url: item.coverImageURL, size: 50)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack {

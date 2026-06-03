@@ -22,6 +22,9 @@ final class AddEditViewModel {
     var genre:          String        = ""
     var tagInput:       String        = ""
     var tags:           [String]      = []
+    /// URL della copertina già su Storage (per elementi esistenti o dopo l'upload).
+    var coverImageURL:  String?       = nil
+    /// Copertina appena scelta in locale, da caricare al salvataggio.
     var coverImageData: Data?         = nil
     var isbn:           String        = ""
     var openLibraryKey: String?       = nil
@@ -65,9 +68,16 @@ final class AddEditViewModel {
         notes          = item.notes
         genre          = item.genre
         tags           = item.tags
-        coverImageData = item.coverImageData
+        coverImageURL  = item.coverImageURL
+        coverImageData = nil   // l'immagine remota si carica via URL, non in memoria
         isbn           = item.isbn ?? ""
         openLibraryKey = item.openLibraryKey
+    }
+
+    /// Rimuove la copertina (locale e remota). L'eliminazione su Storage avviene al salvataggio.
+    func removeCover() {
+        coverImageData = nil
+        coverImageURL  = nil
     }
 
     var isEditing: Bool { editingItem != nil }
@@ -89,11 +99,30 @@ final class AddEditViewModel {
         defer { isSaving = false }
 
         do {
-            if var item = editingItem {
-                applyChanges(to: &item)
+            // Costruisce l'elemento (con l'id definitivo) prima di toccare Storage.
+            var item: ReadingItem
+            if var existing = editingItem {
+                applyChanges(to: &existing)
+                item = existing
+            } else {
+                item = buildItem()
+            }
+
+            // Sincronizza la copertina su Firebase Storage.
+            if let data = coverImageData {
+                // Nuova immagine scelta dall'utente → upload e salva l'URL.
+                item.coverImageURL = try await CoverStorageService.shared
+                    .uploadCover(data, itemID: item.id)
+            } else if coverImageURL == nil {
+                // L'utente ha rimosso la copertina → elimina anche da Storage.
+                await CoverStorageService.shared.deleteCover(itemID: item.id)
+                item.coverImageURL = nil
+            }
+            item.coverImageData = nil   // il blob non viene mai persistito
+
+            if editingItem != nil {
                 try await repository.update(item)
             } else {
-                let item = buildItem()
                 try await repository.insert(item)
             }
         } catch {
@@ -120,7 +149,7 @@ final class AddEditViewModel {
             notes:          notes,
             genre:          genre,
             tags:           tags,
-            coverImageData: coverImageData,
+            coverImageURL:  coverImageURL,
             openLibraryKey: openLibraryKey,
             isbn:           isbn.isEmpty ? nil : isbn
         )
@@ -147,7 +176,7 @@ final class AddEditViewModel {
         item.openLibraryKey = openLibraryKey
         item.isbn           = isbn.isEmpty ? nil : isbn
         item.updatedAt      = Date()
-        if let d = coverImageData { item.coverImageData = d }
+        item.coverImageURL  = coverImageURL   // l'upload/eliminazione avviene in save()
     }
 
     // MARK: - Tags
@@ -165,17 +194,15 @@ final class AddEditViewModel {
 
     // MARK: - Metadata Search
 
-    func searchMetadata(googleBooksKey: String = "", comicVineKey: String = "") async {
+    func searchMetadata() async {
         isSearchingMetadata = true
         metadataError = nil
         defer { isSearchingMetadata = false }
         do {
             metadataResults = try await MediaSearchService.shared.search(
-                query:             metadataSearchQuery,
-                source:            selectedSource,
-                contentType:       contentType,
-                googleBooksAPIKey: googleBooksKey,
-                comicVineAPIKey:   comicVineKey
+                query:       metadataSearchQuery,
+                source:      selectedSource,
+                contentType: contentType
             )
         } catch {
             metadataError = error.localizedDescription

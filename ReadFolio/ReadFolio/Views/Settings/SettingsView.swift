@@ -4,6 +4,7 @@ import FirebaseAuth
 
 struct SettingsView: View {
     @EnvironmentObject private var authVM: AuthViewModel
+    @State private var showDeleteAccountAlert = false
 
     var body: some View {
         NavigationStack {
@@ -12,10 +13,19 @@ struct SettingsView: View {
                 Form {
                     infoSection
                     logoutSection
+                    dangerZoneSection
                 }
             }
             .navigationTitle("Impostazioni")
             .navigationBarTitleDisplayMode(.inline)
+            .alert("Eliminare l'account?", isPresented: $showDeleteAccountAlert) {
+                Button("Elimina account", role: .destructive) {
+                    Task { await authVM.deleteAccount() }
+                }
+                Button("Annulla", role: .cancel) {}
+            } message: {
+                Text("Questa azione è irreversibile: verranno eliminati definitivamente il tuo account e tutta la tua libreria.")
+            }
         }
     }
 
@@ -77,6 +87,29 @@ struct SettingsView: View {
                     Spacer()
                 }
             }
+        }
+    }
+
+    // MARK: - Zona pericolosa
+
+    private var dangerZoneSection: some View {
+        Section {
+            Button(role: .destructive) {
+                showDeleteAccountAlert = true
+            } label: {
+                HStack {
+                    Spacer()
+                    if authVM.isLoading {
+                        ProgressView()
+                    } else {
+                        Label("Elimina account", systemImage: "person.crop.circle.badge.xmark")
+                    }
+                    Spacer()
+                }
+            }
+            .disabled(authVM.isLoading)
+        } footer: {
+            Text("Elimina definitivamente l'account e tutti i dati associati.")
         }
     }
 
