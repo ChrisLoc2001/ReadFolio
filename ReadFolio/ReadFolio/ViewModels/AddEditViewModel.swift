@@ -115,6 +115,11 @@ final class AddEditViewModel {
             if editingItem != nil {
                 try await repository.update(item)
             } else {
+                let isDuplicate = try await repository.exists(title: item.title, contentType: item.contentType)
+                if isDuplicate {
+                    validationError = "Hai già aggiunto \"\(item.title)\" alla tua libreria."
+                    return
+                }
                 try await repository.insert(item)
             }
         } catch {
@@ -220,8 +225,7 @@ final class AddEditViewModel {
 
         if let url = result.coverURL {
             coverImageURL = url.absoluteString
-            let source = resolvedSource(for: result)
-            if let data = await MediaSearchService.shared.fetchCoverData(from: url, source: source) {
+            if let (data, _) = try? await URLSession.shared.data(from: url) {
                 coverImageData = ImageService.processImage(data)
             }
         }
