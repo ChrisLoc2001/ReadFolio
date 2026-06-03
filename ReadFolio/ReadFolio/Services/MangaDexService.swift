@@ -74,7 +74,7 @@ actor MangaDexService {
             URLQueryItem(name: "limit",            value: "20"),
             URLQueryItem(name: "includes[]",       value: "author"),
             URLQueryItem(name: "includes[]",       value: "artist"),
-            URLQueryItem(name: "includes[]",       value: "coverart"),
+            URLQueryItem(name: "includes[]",       value: "cover_art"),
             URLQueryItem(name: "contentRating[]",  value: "safe"),
             URLQueryItem(name: "contentRating[]",  value: "suggestive"),
             URLQueryItem(name: "order[relevance]", value: "desc")
@@ -95,7 +95,7 @@ actor MangaDexService {
             URLQueryItem(name: "limit",                value: "20"),
             URLQueryItem(name: "includes[]",           value: "author"),
             URLQueryItem(name: "includes[]",           value: "artist"),
-            URLQueryItem(name: "includes[]",           value: "coverart"),
+            URLQueryItem(name: "includes[]",           value: "cover_art"),
             URLQueryItem(name: "contentRating[]",      value: "safe"),
             URLQueryItem(name: "contentRating[]",      value: "suggestive"),
             URLQueryItem(name: "order[followedCount]", value: "desc")
@@ -188,7 +188,7 @@ actor MangaDexService {
                    let name = relAttrs?["name"] as? String { authors.append(name) }
                 if relType == "artist",
                    let name = relAttrs?["name"] as? String { artists.append(name) }
-                if relType == "coverart",
+                if relType == "cover_art",
                    let fname = relAttrs?["fileName"] as? String { coverFilename = fname }
             }
 
