@@ -219,8 +219,11 @@ final class AddEditViewModel {
         contentType = result.contentType
 
         if let url = result.coverURL {
-            coverImageURL  = url.absoluteString
-            coverImageData = nil
+            coverImageURL = url.absoluteString
+            let source = resolvedSource(for: result)
+            if let data = await MediaSearchService.shared.fetchCoverData(from: url, source: source) {
+                coverImageData = ImageService.processImage(data)
+            }
         }
         metadataResults = []
     }
