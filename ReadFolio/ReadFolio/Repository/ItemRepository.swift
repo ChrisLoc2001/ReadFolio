@@ -57,6 +57,18 @@ final class ItemRepository {
             .collection("profile").document("info").delete()
     }
 
+    /// Controlla se esiste già un elemento con lo stesso titolo (case-insensitive) e tipo.
+    func exists(title: String, contentType: ContentType) async throws -> Bool {
+        let snapshot = try await itemsCollection
+            .whereField("contentType", isEqualTo: contentType.rawValue)
+            .getDocuments()
+        let normalized = title.trimmingCharacters(in: .whitespaces).lowercased()
+        return snapshot.documents.contains { doc in
+            let t = (doc.data()["title"] as? String ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+            return t == normalized
+        }
+    }
+
     // MARK: - Fetch
 
     func fetchAll() async throws -> [ReadingItem] {
