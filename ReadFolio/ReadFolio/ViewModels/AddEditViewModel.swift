@@ -108,17 +108,9 @@ final class AddEditViewModel {
                 item = buildItem()
             }
 
-            // Sincronizza la copertina su Firebase Storage.
-            if let data = coverImageData {
-                // Nuova immagine scelta dall'utente → upload e salva l'URL.
-                item.coverImageURL = try await CoverStorageService.shared
-                    .uploadCover(data, itemID: item.id)
-            } else if coverImageURL == nil {
-                // L'utente ha rimosso la copertina → elimina anche da Storage.
-                await CoverStorageService.shared.deleteCover(itemID: item.id)
-                item.coverImageURL = nil
-            }
-            item.coverImageData = nil   // il blob non viene mai persistito
+            // Copertina: URL esterno salvato direttamente (no Firebase Storage).
+            item.coverImageURL  = coverImageURL
+            item.coverImageData = nil
 
             if editingItem != nil {
                 try await repository.update(item)
@@ -227,12 +219,8 @@ final class AddEditViewModel {
         contentType = result.contentType
 
         if let url = result.coverURL {
-            let source = resolvedSource(for: result)
-            if let data = await MediaSearchService.shared.fetchCoverData(
-                from: url, source: source
-            ) {
-                coverImageData = ImageService.processImage(data)
-            }
+            coverImageURL  = url.absoluteString
+            coverImageData = nil
         }
         metadataResults = []
     }
