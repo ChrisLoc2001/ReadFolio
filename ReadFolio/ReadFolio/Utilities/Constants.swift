@@ -27,10 +27,5 @@ enum Constants {
         static let maxResults = 20
     }
 
-    // Chiavi persistite in UserDefaults tramite @AppStorage in SettingsView.
-    // Non hardcodate qui — l'utente le inserisce nelle Impostazioni.
-    enum UserDefaultsKeys {
-        static let googleBooksAPIKey = "googleBooksAPIKey"
-        static let comicVineAPIKey   = "comicVineAPIKey"
-    }
+    // Le API key non sono qui: si configurano in Secrets.xcconfig e si leggono via AppConfig.
 }

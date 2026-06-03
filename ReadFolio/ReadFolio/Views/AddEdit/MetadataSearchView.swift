@@ -4,10 +4,6 @@ struct MetadataSearchView: View {
     @Bindable var vm: AddEditViewModel
     @Environment(\.dismiss) private var dismiss
 
-    private var googleBooksKey: String { KeychainHelper.load(for: "googleBooksAPIKey") }
-    private var comicVineKey:   String { KeychainHelper.load(for: "comicVineAPIKey") }
-
-
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -31,22 +27,14 @@ struct MetadataSearchView: View {
                 }
             }
             // Carica i top risultati appena si apre la sheet
-            .task {
-                await vm.searchMetadata(
-                    googleBooksKey: googleBooksKey,
-                    comicVineKey: comicVineKey
-                )
-            }
+            .task { await vm.searchMetadata() }
             // Ricerca live mentre l'utente digita (debounce 600ms)
             .onChange(of: vm.metadataSearchQuery) { _, newValue in
                 Task {
                     try? await Task.sleep(for: .milliseconds(600))
                     // Controlla che la query non sia cambiata di nuovo durante l'attesa
                     guard vm.metadataSearchQuery == newValue else { return }
-                    await vm.searchMetadata(
-                        googleBooksKey: googleBooksKey,
-                        comicVineKey: comicVineKey
-                    )
+                    await vm.searchMetadata()
                 }
             }
         }
@@ -58,17 +46,12 @@ struct MetadataSearchView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(SearchSource.allCases) { source in
-                    if source == .comicVine && comicVineKey.isEmpty {
+                    if source == .comicVine && !AppConfig.isComicVineConfigured {
                         EmptyView()
                     } else {
                         Button {
                             vm.selectedSource = source
-                            Task {
-                                await vm.searchMetadata(
-                                    googleBooksKey: googleBooksKey,
-                                    comicVineKey: comicVineKey
-                                )
-                            }
+                            Task { await vm.searchMetadata() }
                         } label: {
                             Label(source.rawValue, systemImage: source.icon)
                                 .font(.caption.weight(.semibold))
@@ -144,12 +127,7 @@ struct MetadataSearchView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal)
                 Button("Riprova") {
-                    Task {
-                        await vm.searchMetadata(
-                            googleBooksKey: googleBooksKey,
-                            comicVineKey: comicVineKey
-                        )
-                    }
+                    Task { await vm.searchMetadata() }
                 }
                 .buttonStyle(.borderedProminent)
             }

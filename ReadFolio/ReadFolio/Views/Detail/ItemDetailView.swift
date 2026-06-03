@@ -42,7 +42,7 @@ struct ItemDetailView: View {
 
     private var headerSection: some View {
         HStack(spacing: 16) {
-            CoverImageView(data: vm.item.coverImageData, size: 120)
+            CoverImageView(data: vm.item.coverImageData, url: vm.item.coverImageURL, size: 120)
                 .shadow(radius: 4)
             VStack(alignment: .leading, spacing: 6) {
                 Text(vm.item.title).font(.title2.bold())

@@ -4,10 +4,6 @@ import Foundation
 // MARK: - Date
 
 extension Date {
-    func ISO8601Format() -> String {
-        ISO8601DateFormatter().string(from: self)
-    }
-
     var shortFormatted: String {
         let f = DateFormatter()
         f.dateStyle = .short

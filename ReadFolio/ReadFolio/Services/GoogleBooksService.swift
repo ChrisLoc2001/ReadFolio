@@ -1,23 +1,10 @@
 import Foundation
 
 // ─────────────────────────────────────────────
-// GOOGLE BOOKS API KEY
-// Ottieni la tua chiave gratuita su:
-// https://console.cloud.google.com
-//
-// Passaggi:
-// 1. Crea un progetto
-// 2. Vai su "API e servizi" → "Libreria"
-// 3. Cerca "Books API" e abilitala
-// 4. Vai su "Credenziali" → "Crea credenziali" → "Chiave API"
-// 5. Sostituisci il valore qui sotto con la tua chiave
-//
-// Senza key:  ~100 richieste/giorno
-// Con key:   1000 richieste/giorno (gratuito)
+// GOOGLE BOOKS API KEY (opzionale)
+// Configurabile in Secrets.xcconfig (GOOGLE_BOOKS_API_KEY). Letta centralmente da AppConfig.
+// Senza key: ~100 richieste/giorno · Con key: 1000 richieste/giorno (gratuito).
 // ─────────────────────────────────────────────
-private nonisolated var googleBooksAPIKey: String {
-    Bundle.main.infoDictionary?["GoogleBooksAPIKey"] as? String ?? ""
-}
 
 struct GoogleBooksResult: Identifiable {
     let id: String
@@ -85,8 +72,8 @@ actor GoogleBooksService {
         ]
 
         // Aggiunge la key solo se è stata configurata
-        if !googleBooksAPIKey.isEmpty && googleBooksAPIKey != "[INSERISCI LA TUA API KEY QUI]" {
-            queryItems.append(URLQueryItem(name: "key", value: googleBooksAPIKey))
+        if AppConfig.isGoogleBooksConfigured {
+            queryItems.append(URLQueryItem(name: "key", value: AppConfig.googleBooksAPIKey))
         }
 
         components.queryItems = queryItems

@@ -60,3 +60,10 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Secrets / API keys (non versionare le chiavi reali)
+ReadFolio/ReadFolio/Secrets.xcconfig
+
+# Local build artifacts
+ReadFolio/build/
+ReadFolio/ReadFolio/build/

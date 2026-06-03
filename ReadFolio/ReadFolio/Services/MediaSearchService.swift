@@ -53,9 +53,7 @@ actor MediaSearchService {
     func search(
         query: String,
         source: SearchSource,
-        contentType: ContentType,
-        googleBooksAPIKey: String = "",
-        comicVineAPIKey: String = ""
+        contentType: ContentType
     ) async throws -> [MediaSearchResult] {
 
         let effectiveSource = resolveSource(source: source, contentType: contentType)
@@ -70,10 +68,7 @@ actor MediaSearchService {
             return results.map { normalize(manga: $0) }
 
         case .comicVine:
-            let results = try await ComicVineService.shared.searchVolumes(
-                query: query,
-                apiKey: comicVineAPIKey
-            )
+            let results = try await ComicVineService.shared.searchVolumes(query: query)
             return results.map { normalize(comic: $0) }
 
         case .auto:

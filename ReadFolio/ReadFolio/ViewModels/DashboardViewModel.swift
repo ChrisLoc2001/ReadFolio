@@ -17,10 +17,10 @@ final class DashboardViewModel {
         isLoading = true
         defer { isLoading = false }
         do {
-            statusCounts  = try await repository.countByStatus()
-            averageRating = try await repository.averageRating()
-            monthStats    = try await repository.completedPerMonth()
             let all       = try await repository.fetchAll()
+            statusCounts  = ItemRepository.countByStatus(in: all)
+            averageRating = ItemRepository.averageRating(of: all)
+            monthStats    = ItemRepository.completedPerMonth(from: all)
             recentItems   = Array(all.prefix(5))
         } catch {
             errorMessage = error.localizedDescription

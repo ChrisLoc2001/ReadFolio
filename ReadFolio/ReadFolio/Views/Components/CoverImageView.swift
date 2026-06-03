@@ -9,8 +9,17 @@
 import SwiftUI
 
 struct CoverImageView: View {
+    /// Immagine locale appena scelta (anteprima prima dell'upload). Ha priorità sull'URL.
     let data: Data?
+    /// URL della copertina su Firebase Storage.
+    var url: String? = nil
     let size: CGFloat
+
+    init(data: Data?, url: String? = nil, size: CGFloat) {
+        self.data = data
+        self.url  = url
+        self.size = size
+    }
 
     var body: some View {
         Group {
@@ -18,14 +27,21 @@ struct CoverImageView: View {
                 image
                     .resizable()
                     .scaledToFill()
-            } else {
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(.quaternary)
-                    .overlay {
-                        Image(systemName: "book.closed")
-                            .foregroundStyle(.tertiary)
-                            .font(.system(size: size * 0.35))
+            } else if let url, let remote = URL(string: url) {
+                AsyncImage(url: remote) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .empty:
+                        placeholder.overlay { ProgressView() }
+                    case .failure:
+                        placeholder
+                    @unknown default:
+                        placeholder
                     }
+                }
+            } else {
+                placeholder
             }
         }
         .frame(width: size, height: size * 1.4)
@@ -33,15 +49,24 @@ struct CoverImageView: View {
         .accessibilityHidden(true)
     }
 
+    private var placeholder: some View {
+        RoundedRectangle(cornerRadius: cornerRadius)
+            .fill(.quaternary)
+            .overlay {
+                Image(systemName: "book.closed")
+                    .foregroundStyle(.tertiary)
+                    .font(.system(size: size * 0.35))
+            }
+    }
+
     private var cornerRadius: CGFloat { size * 0.1 }
 
     private func platformImage(from data: Data) -> Image? {
+        guard let decoded = CoverImageCache.image(for: data) else { return nil }
         #if canImport(UIKit)
-        guard let ui = UIImage(data: data) else { return nil }
-        return Image(uiImage: ui)
+        return Image(uiImage: decoded)
         #elseif canImport(AppKit)
-        guard let ns = NSImage(data: data) else { return nil }
-        return Image(nsImage: ns)
+        return Image(nsImage: decoded)
         #endif
     }
 }

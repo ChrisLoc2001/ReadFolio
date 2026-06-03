@@ -1,0 +1,45 @@
+rules_version = '2';
+
+// Regole di sicurezza Firestore per ReadFolio.
+//
+// Principio: ogni utente accede SOLO ai propri dati. La collezione globale
+// `usernames` serve solo a garantire l'unicità del nome utente.
+//
+// Deploy:  firebase deploy --only firestore:rules
+// Test:    firebase emulators:start --only firestore  (consigliato per i test di integrazione)
+//
+// NOTA: abilitare anche Firebase App Check per bloccare client non autentici.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Dati personali dell'utente: libreria, tag, profilo.
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /{document=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Riserva globale degli username (unicità).
+    // - Lettura: consentita agli utenti autenticati (serve per il check di disponibilità).
+    // - Creazione: solo se il documento NON esiste già e l'utente registra il proprio uid.
+    // - Modifica/eliminazione: solo il proprietario della riserva.
+    match /usernames/{username} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+                    && request.resource.data.userID == request.auth.uid;
+      allow update, delete: if isSignedIn()
+                    && resource.data.userID == request.auth.uid;
+    }
+  }
+}

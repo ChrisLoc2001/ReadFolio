@@ -32,12 +32,29 @@ final class ItemRepository {
 
     func delete(_ item: ReadingItem) async throws {
         try await itemsCollection.document(item.id).delete()
+        await CoverStorageService.shared.deleteCover(itemID: item.id)
     }
 
     func duplicate(_ item: ReadingItem) async throws -> ReadingItem {
         let copy = item.duplicate()
         try await insert(copy)
         return copy
+    }
+
+    /// Elimina tutti i dati dell'utente corrente (libreria, tag, profilo).
+    /// Idempotente: è sicuro richiamarla anche se le collezioni sono già vuote.
+    func deleteAllUserData() async throws {
+        let items = try await itemsCollection.getDocuments()
+        for doc in items.documents {
+            await CoverStorageService.shared.deleteCover(itemID: doc.documentID)
+            try await doc.reference.delete()
+        }
+
+        let tags = try await tagsCollection.getDocuments()
+        for doc in tags.documents { try await doc.reference.delete() }
+
+        try await db.collection("users").document(userID)
+            .collection("profile").document("info").delete()
     }
 
     // MARK: - Fetch
@@ -94,26 +111,26 @@ final class ItemRepository {
     }
 
     // MARK: - Statistics
+    //
+    // Funzioni pure su un array già caricato: la Dashboard fa UNA sola fetchAll()
+    // e calcola tutte le statistiche in memoria, invece di leggere Firestore N volte.
 
-    func countByStatus() async throws -> [ReadingStatus: Int] {
-        let all = try await fetchAll()
+    nonisolated static func countByStatus(in items: [ReadingItem]) -> [ReadingStatus: Int] {
         var result: [ReadingStatus: Int] = [:]
         for status in ReadingStatus.allCases {
-            result[status] = all.filter { $0.status == status }.count
+            result[status] = items.filter { $0.status == status }.count
         }
         return result
     }
 
-    func averageRating() async throws -> Double {
-        let all   = try await fetchAll()
-        let rated = all.filter { $0.rating > 0 }
+    nonisolated static func averageRating(of items: [ReadingItem]) -> Double {
+        let rated = items.filter { $0.rating > 0 }
         guard !rated.isEmpty else { return 0 }
         return Double(rated.map { $0.rating }.reduce(0, +)) / Double(rated.count)
     }
 
-    func completedPerMonth() async throws -> [MonthStat] {
-        let all       = try await fetchAll()
-        let completed = all.filter { $0.status == .completed && $0.endDate != nil }
+    nonisolated static func completedPerMonth(from items: [ReadingItem]) -> [MonthStat] {
+        let completed = items.filter { $0.status == .completed && $0.endDate != nil }
         let calendar  = Calendar.current
         let now       = Date()
         var stats: [MonthStat] = []
@@ -146,9 +163,13 @@ struct MonthStat: Identifiable {
     let date:  Date
     let count: Int
 
-    var label: String {
+    private static let monthFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "MMM"
-        return f.string(from: date)
+        return f
+    }()
+
+    var label: String {
+        Self.monthFormatter.string(from: date)
     }
 }

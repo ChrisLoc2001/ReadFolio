@@ -6,7 +6,7 @@
 	<array>
 		<dict>
 			<key>CFBundleIdentifier</key>
-			<string></string>
+			<string>com.Chris.ReadFolio</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
@@ -21,7 +21,7 @@
 	<string>$(COMIC_VINE_API_KEY)</string>
 	<key>GIDClientID</key>
 	<string>835461560099-hks9he7r3pqdm4s1neo41ifff99aicom.apps.googleusercontent.com</string>
-	<key>GoogleBooksAPIKey </key>
+	<key>GoogleBooksAPIKey</key>
 	<string>$(GOOGLE_BOOKS_API_KEY)</string>
 </dict>
 </plist>

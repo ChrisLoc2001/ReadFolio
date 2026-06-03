@@ -1,19 +1,10 @@
 import Foundation
 
 // ─────────────────────────────────────────────
-// COMIC VINE API KEY
-// Ottieni la tua chiave gratuita su:
-// https://comicvine.gamespot.com/api
-//
-// Passaggi:
-// 1. Registrati o accedi su comicvine.gamespot.com
-// 2. Vai su https://comicvine.gamespot.com/api
-// 3. La key è visibile direttamente nella pagina
-// 4. Sostituisci il valore qui sotto con la tua chiave
+// COMIC VINE API KEY (obbligatoria per questa sorgente)
+// Si ottiene su https://comicvine.gamespot.com/api e si configura in
+// Secrets.xcconfig (COMIC_VINE_API_KEY). Letta centralmente da AppConfig.
 // ─────────────────────────────────────────────
-private nonisolated var comicVineAPIKey: String {
-    Bundle.main.infoDictionary?["ComicVineAPIKey"] as? String ?? ""
-}
 
 struct ComicVineResult: Identifiable {
     let id: Int
@@ -37,7 +28,7 @@ enum ComicVineError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingAPIKey:
-            return "API key Comic Vine non configurata. Vedi il file ComicVineService.swift."
+            return "API key Comic Vine non configurata. Inseriscila in Secrets.xcconfig (COMIC_VINE_API_KEY)."
         case .networkError(let e):
             return "Errore di rete: \(e.localizedDescription)"
         case .decodingError:
@@ -70,16 +61,15 @@ actor ComicVineService {
     // MARK: - Validazione key
 
     private func validatedKey() throws -> String {
-        let trimmed = comicVineAPIKey.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty && trimmed != "[INSERISCI LA TUA API KEY QUI]" else {
+        guard AppConfig.isComicVineConfigured else {
             throw ComicVineError.missingAPIKey
         }
-        return trimmed
+        return AppConfig.comicVineAPIKey
     }
 
     // MARK: - Search Volumes
 
-    func searchVolumes(query: String, apiKey: String = comicVineAPIKey) async throws -> [ComicVineResult] {
+    func searchVolumes(query: String) async throws -> [ComicVineResult] {
         let key = try validatedKey()
         let trimmed = query.trimmingCharacters(in: .whitespaces)
 
