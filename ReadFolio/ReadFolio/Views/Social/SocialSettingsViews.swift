@@ -8,11 +8,10 @@ struct PrivacySettingsView: View {
         Form {
             Section {
                 Toggle("Profilo pubblico", isOn: $vm.isPublic)
-                Toggle("Approva i follower manualmente", isOn: $vm.followApprovalRequired)
             } footer: {
                 Text(vm.isPublic
-                     ? "Chiunque può vedere la tua libreria."
-                     : "Solo i follower che approvi possono vedere la tua libreria.")
+                     ? "Chiunque può vedere la tua libreria e chi ti segue viene aggiunto subito."
+                     : "Le richieste di follow dovranno essere approvate da te e solo i follower approvati vedranno la tua libreria.")
             }
 
             if let error = vm.errorMessage {
@@ -22,9 +21,8 @@ struct PrivacySettingsView: View {
         .navigationTitle("Privacy")
         .navigationBarTitleDisplayMode(.inline)
         .task { await vm.load() }
-        // Salva ad ogni modifica dei toggle.
-        .onChange(of: vm.isPublic)               { Task { await vm.save() } }
-        .onChange(of: vm.followApprovalRequired) { Task { await vm.save() } }
+        // Salva ad ogni modifica del toggle.
+        .onChange(of: vm.isPublic) { Task { await vm.save() } }
         .overlay { if vm.isLoading { ProgressView() } }
     }
 }

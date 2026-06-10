@@ -15,8 +15,6 @@ final class AuthViewModel: ObservableObject {
     @Published var errorMessage:    String?
     @Published var currentUser:     User?
     @Published var username:        String = ""
-    /// True quando l'utente è autenticato ma non ha ancora completato la scelta
-    /// di privacy del profilo (primo accesso o account creato prima del social).
     @Published var needsProfileSetup: Bool = false
 
     private let db     = Firestore.firestore()
@@ -58,21 +56,15 @@ final class AuthViewModel: ObservableObject {
     }
 
     // MARK: - Stato profilo (username + setup privacy)
-    /// Carica lo username e determina se serve completare il setup del profilo
-    /// (assenza del profilo pubblico = privacy non ancora scelta).
     func refreshProfileState(userID: String) async {
         await fetchUsername(userID: userID)
         let profile = try? await social.myPublicProfile()
         needsProfileSetup = (profile == nil)
     }
 
-    /// Completa il setup del profilo: riserva lo username se mancante (es. accesso
-    /// con Google) e crea il profilo pubblico con le preferenze di privacy.
-    /// Ritorna true se il setup è andato a buon fine.
     func completeProfileSetup(username chosen: String,
                               displayName: String,
-                              isPublic: Bool,
-                              followApprovalRequired: Bool) async -> Bool {
+                              isPublic: Bool) async -> Bool {
         guard let uid = currentUser?.uid else { return false }
         isLoading = true
         errorMessage = nil
@@ -95,10 +87,9 @@ final class AuthViewModel: ObservableObject {
             }
 
             try await social.upsertMyPublicProfile(
-                username:               finalUsername,
-                displayName:            displayName.trimmingCharacters(in: .whitespaces),
-                isPublic:               isPublic,
-                followApprovalRequired: followApprovalRequired
+                username:    finalUsername,
+                displayName: displayName.trimmingCharacters(in: .whitespaces),
+                isPublic:    isPublic
             )
             needsProfileSetup = false
             return true
@@ -274,12 +265,13 @@ final class AuthViewModel: ObservableObject {
         do {
             try await ItemRepository().deleteAllUserData()
 
+            // Rimuove ogni traccia social: follow in entrambe le direzioni,
+            // follower, bloccati e profilo pubblico (sparisce dalla ricerca).
+            await social.deleteAllSocialData()
+
             if !username.isEmpty {
                 try await db.collection("usernames").document(username).delete()
             }
-
-            // Rimuove il profilo pubblico così sparisce dalla ricerca.
-            try? await db.collection("publicProfiles").document(user.uid).delete()
 
             try await user.delete()
 

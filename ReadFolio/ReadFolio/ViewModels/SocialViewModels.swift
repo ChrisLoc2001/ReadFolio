@@ -27,7 +27,6 @@ final class CommunityViewModel {
         }
     }
 
-    /// Aggiorna il badge delle richieste di follow in attesa.
     func refreshPendingCount() async {
         pendingCount = (try? await repo.pendingRequests().count) ?? 0
     }
@@ -48,7 +47,6 @@ final class PublicProfileViewModel {
 
     init(profile: PublicProfile) { self.profile = profile }
 
-    /// Posso vedere la libreria se il profilo è pubblico o se sono follower accettato.
     var canViewLibrary: Bool {
         profile.isPublic || followStatus == .accepted
     }
@@ -56,7 +54,7 @@ final class PublicProfileViewModel {
     var followButtonTitle: String {
         switch followStatus {
         case .none:     return "Segui"
-        case .pending:  return "Richiesta inviata"
+        case .pending:  return "Annulla Richiesta"
         case .accepted: return "Stai seguendo"
         }
     }
@@ -92,8 +90,10 @@ final class PublicProfileViewModel {
         do {
             if followStatus == nil {
                 try await repo.follow(profile)
-                followStatus = profile.followApprovalRequired ? .pending : .accepted
+                followStatus = profile.requiresFollowApproval ? .pending : .accepted
             } else {
+                // Vale sia per "accepted" (unfollow) sia per "pending"
+                // (annulla la richiesta di follow).
                 try await repo.unfollow(profile.id)
                 followStatus = nil
                 items = []
@@ -138,9 +138,16 @@ enum FollowListMode: Identifiable {
 @MainActor
 final class FollowListsViewModel {
     let mode: FollowListMode
-    var profiles:  [PublicProfile] = []
-    var isLoading: Bool            = false
+    var profiles:     [PublicProfile] = []
+    var isLoading:    Bool            = false
     var errorMessage: String?
+
+    /// ID dei richiedenti approvati in questa sessione (mostra "Segui anche tu").
+    var approvedIDs:      Set<String>            = []
+    /// Cache dei profili approvati (rimossi dalla lista principale ma ancora mostrati).
+    var approvedProfiles: [String: PublicProfile] = [:]
+    /// ID degli utenti che già seguo (per nascondere "Segui anche tu" se già seguito).
+    var followingIDs:     Set<String>            = []
 
     private let repo = SocialRepository()
 
@@ -160,11 +167,47 @@ final class FollowListsViewModel {
             if let p = try? await repo.profile(for: edge.id) { resolved.append(p) }
         }
         profiles = resolved
+
+        // Carica gli ID degli utenti già seguiti per gestire "Segui anche tu".
+        let myFollowing = (try? await repo.following()) ?? []
+        followingIDs = Set(myFollowing.map(\.id))
     }
 
-    func approve(_ id: String) async { try? await repo.approve(follower: id);  await load() }
-    func reject(_ id: String)  async { try? await repo.removeFollower(id);     await load() }
-    func unfollow(_ id: String) async { try? await repo.unfollow(id);          await load() }
+    func approve(_ id: String) async {
+        do {
+            try await repo.approve(follower: id)
+            // Salva il profilo in cache prima di rimuoverlo dalla lista.
+            if let profile = profiles.first(where: { $0.id == id }) {
+                approvedProfiles[id] = profile
+            }
+            profiles.removeAll { $0.id == id }
+            approvedIDs.insert(id)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func reject(_ id: String) async {
+        try? await repo.removeFollower(id)
+        profiles.removeAll { $0.id == id }
+        approvedIDs.remove(id)
+        approvedProfiles.removeValue(forKey: id)
+    }
+
+    func unfollow(_ id: String) async {
+        try? await repo.unfollow(id)
+        profiles.removeAll { $0.id == id }
+    }
+
+    /// Segue a propria volta l'utente approvato.
+    func followBack(_ profile: PublicProfile) async {
+        do {
+            try await repo.follow(profile)
+            followingIDs.insert(profile.id)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 }
 
 // MARK: - Utenti bloccati
@@ -199,9 +242,8 @@ final class BlockedUsersViewModel {
 @Observable
 @MainActor
 final class PrivacySettingsViewModel {
-    var isPublic:               Bool = true
-    var followApprovalRequired: Bool = false
-    var isLoading:              Bool = false
+    var isPublic:  Bool = true
+    var isLoading: Bool = false
     var errorMessage: String?
 
     private let repo = SocialRepository()
@@ -210,17 +252,13 @@ final class PrivacySettingsViewModel {
         isLoading = true
         defer { isLoading = false }
         if let p = try? await repo.myPublicProfile() {
-            isPublic               = p.isPublic
-            followApprovalRequired = p.followApprovalRequired
+            isPublic = p.isPublic
         }
     }
 
     func save() async {
         do {
-            try await repo.updatePrivacy(
-                isPublic:               isPublic,
-                followApprovalRequired: followApprovalRequired
-            )
+            try await repo.updatePrivacy(isPublic: isPublic)
         } catch {
             errorMessage = error.localizedDescription
         }

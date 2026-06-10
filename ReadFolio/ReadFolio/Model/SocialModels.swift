@@ -9,13 +9,16 @@ struct PublicProfile: Identifiable, Codable, Hashable {
     var username: String
     var displayName: String
     var isPublic: Bool
-    var followApprovalRequired: Bool
     var createdAt: Date
 
     /// Nome mostrato in UI: il display name se presente, altrimenti lo username.
     var name: String {
         displayName.trimmingCharacters(in: .whitespaces).isEmpty ? username : displayName
     }
+
+    /// L'approvazione delle richieste di follow è legata alla privacy:
+    /// profilo privato ⇒ il proprietario approva manualmente; pubblico ⇒ follow immediato.
+    var requiresFollowApproval: Bool { !isPublic }
 }
 
 /// Stato di una relazione di follow.

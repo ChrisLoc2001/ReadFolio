@@ -1,14 +1,13 @@
 import SwiftUI
 
 /// Step mostrato al primo accesso: l'utente sceglie nome visualizzato e privacy
-/// del profilo (pubblico/privato e se le richieste di follow vanno approvate).
+/// del profilo (pubblico/privato; se privato le richieste di follow vanno approvate).
 struct ProfileSetupView: View {
     @EnvironmentObject private var authVM: AuthViewModel
 
-    @State private var username:               String = ""
-    @State private var displayName:            String = ""
-    @State private var isPublic:               Bool   = true
-    @State private var followApprovalRequired: Bool   = false
+    @State private var username:    String = ""
+    @State private var displayName: String = ""
+    @State private var isPublic:    Bool   = true
 
     /// Lo username è modificabile solo se non è già stato scelto (es. login Google).
     private var needsUsername: Bool { authVM.username.isEmpty }
@@ -33,7 +32,6 @@ struct ProfileSetupView: View {
 
                 Section {
                     Toggle("Profilo pubblico", isOn: $isPublic)
-                    Toggle("Approva i follower manualmente", isOn: $followApprovalRequired)
                 } header: {
                     Text("Privacy")
                 } footer: {
@@ -62,18 +60,17 @@ struct ProfileSetupView: View {
 
     private var privacyExplanation: String {
         if isPublic {
-            return "Chiunque può vedere la tua libreria. Con l'approvazione manuale decidi tu chi compare tra i tuoi follower."
+            return "Chiunque può vedere la tua libreria e chi ti segue viene aggiunto subito."
         } else {
-            return "Solo i follower che approvi potranno vedere la tua libreria."
+            return "Le richieste di follow dovranno essere approvate da te e solo i follower approvati vedranno la tua libreria."
         }
     }
 
     private func save() async {
         let ok = await authVM.completeProfileSetup(
-            username:               username,
-            displayName:            displayName,
-            isPublic:               isPublic,
-            followApprovalRequired: followApprovalRequired
+            username:    username,
+            displayName: displayName,
+            isPublic:    isPublic
         )
         // In caso di errore, AuthViewModel.errorMessage viene mostrato nel Form.
         _ = ok

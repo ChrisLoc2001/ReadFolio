@@ -22,24 +22,21 @@ final class SocialRepository {
     /// Crea o aggiorna il proprio profilo pubblico (discovery + privacy).
     func upsertMyPublicProfile(username: String,
                                displayName: String,
-                               isPublic: Bool,
-                               followApprovalRequired: Bool) async throws {
+                               isPublic: Bool) async throws {
         let profile = PublicProfile(
-            id:                     uid,
-            username:               username.lowercased(),
-            displayName:            displayName,
-            isPublic:               isPublic,
-            followApprovalRequired: followApprovalRequired,
-            createdAt:              Date()
+            id:          uid,
+            username:    username.lowercased(),
+            displayName: displayName,
+            isPublic:    isPublic,
+            createdAt:   Date()
         )
         try publicProfiles.document(uid).setData(from: profile, merge: true)
     }
 
     /// Aggiorna solo le impostazioni di privacy.
-    func updatePrivacy(isPublic: Bool, followApprovalRequired: Bool) async throws {
+    func updatePrivacy(isPublic: Bool) async throws {
         try await publicProfiles.document(uid).setData([
-            "isPublic":               isPublic,
-            "followApprovalRequired": followApprovalRequired
+            "isPublic": isPublic
         ], merge: true)
     }
 
@@ -81,10 +78,10 @@ final class SocialRepository {
         return FollowStatus(rawValue: raw)
     }
 
-    /// Segue un utente. Se il target richiede approvazione, la richiesta resta
+    /// Segue un utente. Se il profilo del target è privato, la richiesta resta
     /// `pending` finché lui non l'accetta.
     func follow(_ target: PublicProfile) async throws {
-        let status: FollowStatus = target.followApprovalRequired ? .pending : .accepted
+        let status: FollowStatus = target.requiresFollowApproval ? .pending : .accepted
         let edge: [String: Any] = [
             "status":    status.rawValue,
             "createdAt": Timestamp(date: Date())
@@ -114,6 +111,10 @@ final class SocialRepository {
     func removeFollower(_ userID: String) async throws {
         try await usersCollection.document(uid)
             .collection("followers").document(userID).delete()
+        // Best effort: toglie anche il mirror nella lista "following" dell'altro
+        // (le Security Rules permettono al target di rimuovere se stesso).
+        try? await usersCollection.document(userID)
+            .collection("following").document(uid).delete()
     }
 
     func followers() async throws -> [FollowEdge] {
@@ -146,6 +147,8 @@ final class SocialRepository {
         try? await removeFollower(userID)
         try? await usersCollection.document(userID)
             .collection("followers").document(uid).delete()
+        try? await usersCollection.document(userID)
+            .collection("following").document(uid).delete()
     }
 
     func unblock(_ userID: String) async throws {
@@ -157,6 +160,56 @@ final class SocialRepository {
         let snap = try await usersCollection.document(uid)
             .collection("blocked").getDocuments()
         return snap.documents.map(\.documentID)
+    }
+
+    // MARK: - Eliminazione account
+
+    /// Cancella tutte le tracce social dell'utente corrente. Chiamata durante
+    /// l'eliminazione dell'account, PRIMA di eliminare l'utente Auth (le Security
+    /// Rules richiedono che sia ancora autenticato).
+    ///
+    /// Pulisce:
+    ///  - le relazioni negli alberi ALTRUI: il mio record `followers` da chi seguivo
+    ///    e il mio record `following` da chi mi seguiva (consentito dalle rules);
+    ///  - le mie sottocollezioni `followers`, `following`, `blocked`;
+    ///  - il mio documento `publicProfiles` (sparisce dalla ricerca).
+    ///
+    /// Ogni passo è best effort e idempotente: un secondo tentativo dopo un
+    /// re-login è sicuro.
+    func deleteAllSocialData() async {
+        let myUID = uid
+        guard !myUID.isEmpty else { return }
+
+        // 1. Smetto di seguire tutti (rimuove i miei record dagli alberi altrui).
+        if let followingSnap = try? await usersCollection.document(myUID)
+            .collection("following").getDocuments() {
+            for doc in followingSnap.documents {
+                try? await usersCollection.document(doc.documentID)
+                    .collection("followers").document(myUID).delete()
+                try? await doc.reference.delete()
+            }
+        }
+
+        // 2. Rimuovo i miei follower (e il mirror nella loro lista "following").
+        if let followersSnap = try? await usersCollection.document(myUID)
+            .collection("followers").getDocuments() {
+            for doc in followersSnap.documents {
+                try? await usersCollection.document(doc.documentID)
+                    .collection("following").document(myUID).delete()
+                try? await doc.reference.delete()
+            }
+        }
+
+        // 3. Svuoto la lista dei bloccati.
+        if let blockedSnap = try? await usersCollection.document(myUID)
+            .collection("blocked").getDocuments() {
+            for doc in blockedSnap.documents {
+                try? await doc.reference.delete()
+            }
+        }
+
+        // 4. Elimino il profilo pubblico.
+        try? await publicProfiles.document(myUID).delete()
     }
 
     // MARK: - Libreria altrui

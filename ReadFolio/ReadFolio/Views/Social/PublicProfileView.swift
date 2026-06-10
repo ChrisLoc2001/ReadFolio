@@ -15,6 +15,8 @@ struct PublicProfileView: View {
             Section { header }
 
             Section {
+                // Cliccabile in ogni stato: con richiesta "pending" il tap
+                // annulla la richiesta di follow.
                 Button {
                     Task { await vm.toggleFollow() }
                 } label: {
@@ -25,7 +27,6 @@ struct PublicProfileView: View {
                         Spacer()
                     }
                 }
-                .disabled(vm.followStatus == .pending)
             }
 
             if vm.canViewLibrary {

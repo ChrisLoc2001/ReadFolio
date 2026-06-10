@@ -34,9 +34,10 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/publicProfiles/$(userId)).data.isPublic == true;
     }
 
-    // Il profilo richiede approvazione manuale dei follower.
+    // L'approvazione è legata alla privacy: profilo privato ⇒ il proprietario
+    // approva manualmente le richieste; pubblico ⇒ follow immediato.
     function requiresApproval(userId) {
-      return get(/databases/$(database)/documents/publicProfiles/$(userId)).data.followApprovalRequired == true;
+      return !profileIsPublic(userId);
     }
 
     // Chi richiede è un follower con stato "accepted".
@@ -86,9 +87,13 @@ service cloud.firestore {
         allow delete: if isOwner(userId) || isOwner(followerId);
       }
 
-      // Seguiti e bloccati: dati privati nel proprio sottoalbero.
+      // Seguiti: dati privati del proprietario. Il TARGET può però eliminare il
+      // record che lo riguarda: serve per la pulizia quando rimuove un follower
+      // o elimina il proprio account (rimozione dei mirror negli alberi altrui).
       match /following/{targetId} {
-        allow read, write: if isOwner(userId);
+        allow read:           if isOwner(userId);
+        allow create, update: if isOwner(userId);
+        allow delete:         if isOwner(userId) || isOwner(targetId);
       }
       match /blocked/{blockedId} {
         allow read, write: if isOwner(userId);
