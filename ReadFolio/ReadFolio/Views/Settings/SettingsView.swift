@@ -1,5 +1,4 @@
 import SwiftUI
-import FirebaseAuth
 
 struct ProfileView: View {
     @EnvironmentObject private var authVM: AuthViewModel
@@ -42,11 +41,6 @@ struct ProfileView: View {
                         }
                     }
                     NavigationLink {
-                        PrivacySettingsView()
-                    } label: {
-                        Label("Privacy del profilo", systemImage: "lock.shield")
-                    }
-                    NavigationLink {
                         BlockedUsersView()
                     } label: {
                         Label("Utenti bloccati", systemImage: "hand.raised")
@@ -54,10 +48,11 @@ struct ProfileView: View {
                 }
 
                 Section("Account") {
-                    if let email = authVM.currentUser?.email {
-                        LabeledContent("Email", value: email)
+                    NavigationLink {
+                        AccountSettingsView()
+                    } label: {
+                        Label("Gestisci account", systemImage: "person.text.rectangle")
                     }
-                    LabeledContent("Accesso", value: loginProvider)
                 }
 
                 Section {
@@ -162,16 +157,6 @@ struct ProfileView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
-    }
-
-    private var loginProvider: String {
-        let id = authVM.currentUser?.providerData.first?.providerID ?? "password"
-        switch id {
-        case "google.com":  return "Google"
-        case "apple.com":   return "Apple"
-        case "password":    return "Email / Password"
-        default:            return id
-        }
     }
 
     private func statCell(value: String, label: String) -> some View {

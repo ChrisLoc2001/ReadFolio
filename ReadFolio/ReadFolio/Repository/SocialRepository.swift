@@ -49,6 +49,19 @@ final class SocialRepository {
         ], merge: true)
     }
 
+    /// Aggiorna le info del profilo pubblico (username, nome visualizzato, privacy)
+    /// SENZA toccare `createdAt` né i contatori — a differenza di `upsert…` che
+    /// riscriverebbe la data di creazione.
+    func updateProfileInfo(username: String,
+                           displayName: String,
+                           isPublic: Bool) async throws {
+        try await publicProfiles.document(uid).setData([
+            "username":    username.lowercased(),
+            "displayName": displayName,
+            "isPublic":    isPublic
+        ], merge: true)
+    }
+
     func myPublicProfile() async throws -> PublicProfile? {
         let doc = try await publicProfiles.document(uid).getDocument()
         return try? doc.data(as: PublicProfile.self)

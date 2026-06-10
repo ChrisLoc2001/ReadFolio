@@ -99,6 +99,57 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Modifica account (info profilo + privacy)
+    /// Aggiorna username, nome visualizzato e privacy. Se lo username cambia,
+    /// ne verifica l'unicità e aggiorna la riserva globale (`usernames/{name}`):
+    /// rivendica il nuovo e rilascia il vecchio.
+    func updateAccount(newUsername: String,
+                       displayName: String,
+                       isPublic: Bool) async -> Bool {
+        guard let uid = currentUser?.uid else { return false }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        let newName = newUsername.trimmingCharacters(in: .whitespaces).lowercased()
+        let display = displayName.trimmingCharacters(in: .whitespaces)
+        let oldName = username.lowercased()
+
+        guard newName.count >= 3 else {
+            errorMessage = "Il nome utente deve avere almeno 3 caratteri."
+            return false
+        }
+
+        do {
+            // Cambio username: controllo unicità + aggiornamento riserva globale.
+            if newName != oldName {
+                guard await isUsernameAvailable(newName) else {
+                    errorMessage = "Nome utente già in uso. Scegline un altro."
+                    return false
+                }
+                try await db.collection("usernames").document(newName)
+                    .setData(["userID": uid])
+                if !oldName.isEmpty {
+                    try? await db.collection("usernames").document(oldName).delete()
+                }
+                try await db.collection("users").document(uid)
+                    .collection("profile").document("info")
+                    .setData(["username": newName], merge: true)
+            }
+
+            try await social.updateProfileInfo(
+                username:    newName,
+                displayName: display,
+                isPublic:    isPublic
+            )
+            self.username = newName
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     // MARK: - Verifica unicità username
     func isUsernameAvailable(_ username: String) async -> Bool {
         let trimmed = username.trimmingCharacters(in: .whitespaces).lowercased()

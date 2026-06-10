@@ -253,30 +253,44 @@ final class BlockedUsersViewModel {
     }
 }
 
-// MARK: - Impostazioni privacy
+// MARK: - Account (info profilo + privacy)
 
 @Observable
 @MainActor
-final class PrivacySettingsViewModel {
-    var isPublic:  Bool = true
-    var isLoading: Bool = false
+final class AccountSettingsViewModel {
+    var username:    String = ""
+    var displayName: String = ""
+    var isPublic:    Bool   = true
+    var isLoading:   Bool   = false
     var errorMessage: String?
 
+    /// Valori originali caricati da Firestore, per rilevare se ci sono modifiche.
+    private var original: (username: String, displayName: String, isPublic: Bool) = ("", "", true)
+
     private let repo = SocialRepository()
+
+    /// True se almeno un campo differisce dal valore caricato.
+    var hasChanges: Bool {
+        username.trimmingCharacters(in: .whitespaces).lowercased() != original.username
+        || displayName.trimmingCharacters(in: .whitespaces) != original.displayName
+        || isPublic != original.isPublic
+    }
 
     func load() async {
         isLoading = true
         defer { isLoading = false }
         if let p = try? await repo.myPublicProfile() {
-            isPublic = p.isPublic
+            username    = p.username
+            displayName = p.displayName
+            isPublic    = p.isPublic
+            original    = (p.username, p.displayName, p.isPublic)
         }
     }
 
-    func save() async {
-        do {
-            try await repo.updatePrivacy(isPublic: isPublic)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+    /// Allinea i valori "originali" dopo un salvataggio riuscito.
+    func markSaved() {
+        original = (username.trimmingCharacters(in: .whitespaces).lowercased(),
+                    displayName.trimmingCharacters(in: .whitespaces),
+                    isPublic)
     }
 }
