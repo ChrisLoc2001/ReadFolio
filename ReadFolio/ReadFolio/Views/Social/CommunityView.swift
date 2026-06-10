@@ -1,42 +1,15 @@
 import SwiftUI
 
-/// Tab "Community": ricerca utenti e accesso alle proprie liste social.
+/// Tab "Community": ricerca utenti e — in futuro — feed degli aggiornamenti dai follower.
 struct CommunityView: View {
     @State private var vm = CommunityViewModel()
 
     var body: some View {
         NavigationStack {
             List {
-                Section("Le tue connessioni") {
-                    NavigationLink {
-                        FollowListsView(mode: .followers)
-                    } label: {
-                        Label("Follower", systemImage: "person.2.fill")
-                    }
-                    NavigationLink {
-                        FollowListsView(mode: .following)
-                    } label: {
-                        Label("Seguiti", systemImage: "person.fill.checkmark")
-                    }
-                    NavigationLink {
-                        FollowListsView(mode: .requests)
-                    } label: {
-                        HStack {
-                            Label("Richieste", systemImage: "person.crop.circle.badge.questionmark")
-                            if vm.pendingCount > 0 {
-                                Spacer()
-                                Text("\(vm.pendingCount)")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 2)
-                                    .background(Color.red, in: Capsule())
-                            }
-                        }
-                    }
-                }
-
-                if !vm.results.isEmpty {
+                if vm.results.isEmpty && vm.query.trimmingCharacters(in: .whitespaces).isEmpty {
+                    feedPlaceholder
+                } else if !vm.results.isEmpty {
                     Section("Risultati") {
                         ForEach(vm.results) { profile in
                             NavigationLink {
@@ -46,7 +19,7 @@ struct CommunityView: View {
                             }
                         }
                     }
-                } else if !vm.query.trimmingCharacters(in: .whitespaces).isEmpty && !vm.isSearching {
+                } else if !vm.isSearching {
                     Section {
                         Text("Nessun utente trovato.")
                             .foregroundStyle(.secondary)
@@ -56,9 +29,29 @@ struct CommunityView: View {
             .navigationTitle("Community")
             .searchable(text: $vm.query, prompt: "Cerca utenti per nome utente")
             .onSubmit(of: .search) { Task { await vm.search() } }
+            .onChange(of: vm.query) { _, new in
+                if new.trimmingCharacters(in: .whitespaces).isEmpty { vm.results = [] }
+            }
             .overlay { if vm.isSearching { ProgressView() } }
-            .task { await vm.refreshPendingCount() }
-            .refreshable { await vm.refreshPendingCount() }
+        }
+    }
+
+    private var feedPlaceholder: some View {
+        Section {
+            VStack(spacing: 12) {
+                Image(systemName: "newspaper")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.tertiary)
+                Text("Feed in arrivo")
+                    .font(.headline)
+                Text("Presto potrai vedere gli aggiornamenti dei tuoi follower e delle persone che segui.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 32)
+            .listRowBackground(Color.clear)
         }
     }
 }

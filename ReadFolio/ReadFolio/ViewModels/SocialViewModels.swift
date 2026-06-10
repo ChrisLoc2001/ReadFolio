@@ -37,7 +37,7 @@ final class CommunityViewModel {
 @Observable
 @MainActor
 final class PublicProfileViewModel {
-    let profile: PublicProfile
+    private(set) var profile: PublicProfile
     var items:        [ReadingItem] = []
     var followStatus: FollowStatus?
     var isLoading:    Bool          = false
@@ -49,6 +49,11 @@ final class PublicProfileViewModel {
 
     var canViewLibrary: Bool {
         profile.isPublic || followStatus == .accepted
+    }
+
+    /// Numero di elementi completati. nil = libreria non accessibile (profilo privato).
+    var completedCount: Int? {
+        canViewLibrary ? items.filter { $0.status == .completed }.count : nil
     }
 
     var followButtonTitle: String {
@@ -92,13 +97,13 @@ final class PublicProfileViewModel {
                 try await repo.follow(profile)
                 followStatus = profile.requiresFollowApproval ? .pending : .accepted
             } else {
-                // Vale sia per "accepted" (unfollow) sia per "pending"
-                // (annulla la richiesta di follow).
-                try await repo.unfollow(profile.id)
+                let wasAccepted = (followStatus == .accepted)
+                try await repo.unfollow(profile.id, wasAccepted: wasAccepted)
                 followStatus = nil
                 items = []
             }
             await loadItemsIfAllowed()
+            await refreshProfileCounts()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -111,6 +116,14 @@ final class PublicProfileViewModel {
             items = []
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Rilegge i contatori aggiornati del profilo visualizzato (follower/seguiti
+    /// cambiano in seguito a un follow/unfollow).
+    private func refreshProfileCounts() async {
+        if let updated = try? await repo.profile(for: profile.id) {
+            profile = updated
         }
     }
 
@@ -188,14 +201,17 @@ final class FollowListsViewModel {
     }
 
     func reject(_ id: String) async {
-        try? await repo.removeFollower(id)
+        // In .requests mode le richieste sono pending → wasAccepted: false
+        // In .followers mode il follower è accepted → wasAccepted: true
+        let wasAccepted = (mode == .followers)
+        try? await repo.removeFollower(id, wasAccepted: wasAccepted)
         profiles.removeAll { $0.id == id }
         approvedIDs.remove(id)
         approvedProfiles.removeValue(forKey: id)
     }
 
     func unfollow(_ id: String) async {
-        try? await repo.unfollow(id)
+        try? await repo.unfollow(id, wasAccepted: true)
         profiles.removeAll { $0.id == id }
     }
 

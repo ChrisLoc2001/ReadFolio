@@ -10,6 +10,10 @@ struct PublicProfile: Identifiable, Codable, Hashable {
     var displayName: String
     var isPublic: Bool
     var createdAt: Date
+    /// Contatori denormalizzati: aggiornati client-side ad ogni follow/unfollow.
+    /// Opzionali per compatibilità con documenti creati prima di questo campo.
+    var followersCount: Int?
+    var followingCount: Int?
 
     /// Nome mostrato in UI: il display name se presente, altrimenti lo username.
     var name: String {

@@ -53,11 +53,29 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/users/$(userId)/blocked/$(request.auth.uid));
     }
 
+    // Un campo contatore varia di esattamente ±1 (gestisce anche il campo assente = 0).
+    function stepsByOne(field) {
+      return request.resource.data.get(field, 0) == resource.data.get(field, 0) + 1
+          || request.resource.data.get(field, 0) == resource.data.get(field, 0) - 1;
+    }
+
+    // Aggiornamento che tocca SOLO uno dei contatori denormalizzati, di ±1.
+    // Serve quando segui/smetti di seguire o quando approvi una richiesta:
+    // operazioni che modificano il documento di un ALTRO utente.
+    function isCounterStep() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return isSignedIn()
+        && ( (changed.hasOnly(['followersCount']) && stepsByOne('followersCount'))
+           || (changed.hasOnly(['followingCount']) && stepsByOne('followingCount')) );
+    }
+
     // Profili pubblici: discovery + privacy. NESSUN dato sensibile (no email).
-    // Leggibili da ogni utente autenticato; scrivibili solo dal proprietario.
+    // Leggibili da ogni utente autenticato. Il proprietario gestisce ogni campo;
+    // chiunque può però aggiornare i contatori follower/seguiti di un passo ±1.
     match /publicProfiles/{userId} {
-      allow read:  if isSignedIn();
-      allow write: if isOwner(userId);
+      allow read:           if isSignedIn();
+      allow create, delete: if isOwner(userId);
+      allow update:         if isOwner(userId) || isCounterStep();
     }
 
     // Sottoalbero personale dell'utente.

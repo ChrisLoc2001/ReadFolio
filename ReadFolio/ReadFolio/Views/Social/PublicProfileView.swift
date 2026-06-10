@@ -66,26 +66,58 @@ struct PublicProfileView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 14) {
             ZStack {
                 Circle().fill(Color.accentColor).frame(width: 72, height: 72)
                 Text(String(vm.profile.name.prefix(1)).uppercased())
                     .font(.system(size: 30, weight: .bold))
                     .foregroundStyle(.white)
             }
-            Text(vm.profile.name).font(.title3.bold())
-            Text("@\(vm.profile.username)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            if !vm.profile.isPublic {
-                Label("Profilo privato", systemImage: "lock.fill")
-                    .font(.caption)
+            VStack(spacing: 4) {
+                Text(vm.profile.name).font(.title3.bold())
+                Text("@\(vm.profile.username)")
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if !vm.profile.isPublic {
+                    Label("Profilo privato", systemImage: "lock.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
+
+            // Statistiche stile Instagram
+            HStack(spacing: 0) {
+                statCell(
+                    value: vm.completedCount.map { "\($0)" } ?? "—",
+                    label: "Letti"
+                )
+                Divider().frame(height: 32)
+                statCell(
+                    value: "\(max(0, vm.profile.followersCount ?? 0))",
+                    label: "Follower"
+                )
+                Divider().frame(height: 32)
+                statCell(
+                    value: "\(max(0, vm.profile.followingCount ?? 0))",
+                    label: "Seguiti"
+                )
+            }
+            .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
         .listRowBackground(Color.clear)
+    }
+
+    private func statCell(value: String, label: String) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.headline)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var librarySection: some View {

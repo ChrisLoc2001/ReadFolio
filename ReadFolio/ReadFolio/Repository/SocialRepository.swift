@@ -31,6 +31,15 @@ final class SocialRepository {
             createdAt:   Date()
         )
         try publicProfiles.document(uid).setData(from: profile, merge: true)
+        // Inizializza i contatori SOLO se assenti, così gli incrementi atomici
+        // partono da un valore definito senza azzerare conteggi già esistenti.
+        let snap = try? await publicProfiles.document(uid).getDocument()
+        var seed: [String: Any] = [:]
+        if snap?.get("followersCount") == nil { seed["followersCount"] = 0 }
+        if snap?.get("followingCount") == nil { seed["followingCount"] = 0 }
+        if !seed.isEmpty {
+            try? await publicProfiles.document(uid).setData(seed, merge: true)
+        }
     }
 
     /// Aggiorna solo le impostazioni di privacy.
@@ -79,25 +88,42 @@ final class SocialRepository {
     }
 
     /// Segue un utente. Se il profilo del target è privato, la richiesta resta
-    /// `pending` finché lui non l'accetta.
+    /// `pending` finché lui non l'accetta. I contatori vengono aggiornati solo
+    /// per i follow immediati (profili pubblici); per quelli privati si aggiornano
+    /// al momento dell'approvazione.
     func follow(_ target: PublicProfile) async throws {
         let status: FollowStatus = target.requiresFollowApproval ? .pending : .accepted
         let edge: [String: Any] = [
             "status":    status.rawValue,
             "createdAt": Timestamp(date: Date())
         ]
-        // Record nel sottoalbero del target (followers) e nel proprio (following).
         try await usersCollection.document(target.id)
             .collection("followers").document(uid).setData(edge)
         try await usersCollection.document(uid)
             .collection("following").document(target.id).setData(edge)
+
+        if status == .accepted {
+            try? await publicProfiles.document(target.id)
+                .updateData(["followersCount": FieldValue.increment(Int64(1))])
+            try? await publicProfiles.document(uid)
+                .updateData(["followingCount": FieldValue.increment(Int64(1))])
+        }
     }
 
-    func unfollow(_ userID: String) async throws {
+    /// Smette di seguire un utente o annulla una richiesta pending.
+    /// `wasAccepted` distingue i due casi per aggiornare i contatori correttamente.
+    func unfollow(_ userID: String, wasAccepted: Bool = true) async throws {
         try await usersCollection.document(userID)
             .collection("followers").document(uid).delete()
         try await usersCollection.document(uid)
             .collection("following").document(userID).delete()
+
+        if wasAccepted {
+            try? await publicProfiles.document(userID)
+                .updateData(["followersCount": FieldValue.increment(Int64(-1))])
+            try? await publicProfiles.document(uid)
+                .updateData(["followingCount": FieldValue.increment(Int64(-1))])
+        }
     }
 
     /// Il proprietario approva una richiesta in attesa.
@@ -105,16 +131,27 @@ final class SocialRepository {
         try await usersCollection.document(uid)
             .collection("followers").document(userID)
             .setData(["status": FollowStatus.accepted.rawValue], merge: true)
+        // La richiesta era pending: ora conta come follower reale.
+        try? await publicProfiles.document(uid)
+            .updateData(["followersCount": FieldValue.increment(Int64(1))])
+        try? await publicProfiles.document(userID)
+            .updateData(["followingCount": FieldValue.increment(Int64(1))])
     }
 
-    /// Rifiuta una richiesta o rimuove un follower esistente.
-    func removeFollower(_ userID: String) async throws {
+    /// Rifiuta una richiesta pending o rimuove un follower già accettato.
+    /// `wasAccepted` distingue i due casi per aggiornare i contatori correttamente.
+    func removeFollower(_ userID: String, wasAccepted: Bool = false) async throws {
         try await usersCollection.document(uid)
             .collection("followers").document(userID).delete()
-        // Best effort: toglie anche il mirror nella lista "following" dell'altro
-        // (le Security Rules permettono al target di rimuovere se stesso).
         try? await usersCollection.document(userID)
             .collection("following").document(uid).delete()
+
+        if wasAccepted {
+            try? await publicProfiles.document(uid)
+                .updateData(["followersCount": FieldValue.increment(Int64(-1))])
+            try? await publicProfiles.document(userID)
+                .updateData(["followingCount": FieldValue.increment(Int64(-1))])
+        }
     }
 
     func followers() async throws -> [FollowEdge] {
