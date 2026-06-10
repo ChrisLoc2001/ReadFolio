@@ -9,6 +9,7 @@ struct AccountSettingsView: View {
     @EnvironmentObject private var authVM: AuthViewModel
     @State private var vm = AccountSettingsViewModel()
     @State private var showConfirm = false
+    @State private var showDeleteAlert = false
 
     var body: some View {
         Form {
@@ -45,6 +46,26 @@ struct AccountSettingsView: View {
                     .foregroundStyle(.red)
                     .font(.footnote)
             }
+
+            Section {
+                Button(role: .destructive) {
+                    showDeleteAlert = true
+                } label: {
+                    HStack {
+                        Spacer()
+                        if authVM.isLoading {
+                            ProgressView()
+                        } else {
+                            Label("Elimina account",
+                                  systemImage: "person.crop.circle.badge.xmark")
+                        }
+                        Spacer()
+                    }
+                }
+                .disabled(authVM.isLoading)
+            } footer: {
+                Text("Elimina definitivamente l'account e tutti i dati associati.")
+            }
         }
         .navigationTitle("Account")
         .navigationBarTitleDisplayMode(.inline)
@@ -61,6 +82,14 @@ struct AccountSettingsView: View {
             Button("Annulla", role: .cancel) {}
         } message: {
             Text("Le modifiche al tuo profilo verranno salvate e saranno visibili agli altri utenti.")
+        }
+        .alert("Eliminare l'account?", isPresented: $showDeleteAlert) {
+            Button("Elimina account", role: .destructive) {
+                Task { await authVM.deleteAccount() }
+            }
+            Button("Annulla", role: .cancel) {}
+        } message: {
+            Text("Questa azione è irreversibile: verranno eliminati definitivamente il tuo account e tutta la tua libreria.")
         }
     }
 

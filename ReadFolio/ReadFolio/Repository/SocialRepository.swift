@@ -167,20 +167,92 @@ final class SocialRepository {
         }
     }
 
+    /// Follower accettati di un altro utente (richiede profilo pubblico o essere follower).
+    func followers(of userID: String) async throws -> [FollowEdge] {
+        let snap = try await usersCollection.document(userID)
+            .collection("followers")
+            .whereField("status", isEqualTo: FollowStatus.accepted.rawValue)
+            .getDocuments()
+        return snap.documents.compactMap(Self.decodeEdge)
+    }
+
+    /// Seguiti accettati di un altro utente.
+    func following(of userID: String) async throws -> [FollowEdge] {
+        let snap = try await usersCollection.document(userID)
+            .collection("following")
+            .whereField("status", isEqualTo: FollowStatus.accepted.rawValue)
+            .getDocuments()
+        return snap.documents.compactMap(Self.decodeEdge)
+    }
+
     func followers() async throws -> [FollowEdge] {
         let snap = try await usersCollection.document(uid)
-            .collection("followers").getDocuments()
+            .collection("followers")
+            .whereField("status", isEqualTo: FollowStatus.accepted.rawValue)
+            .getDocuments()
         return snap.documents.compactMap(Self.decodeEdge)
     }
 
     func following() async throws -> [FollowEdge] {
         let snap = try await usersCollection.document(uid)
-            .collection("following").getDocuments()
+            .collection("following")
+            .whereField("status", isEqualTo: FollowStatus.accepted.rawValue)
+            .getDocuments()
         return snap.documents.compactMap(Self.decodeEdge)
     }
 
+    /// ID di tutti gli utenti verso cui ho un edge di following, a prescindere
+    /// dallo stato. Usato per rilevare follow già inviati (anche pending) e
+    /// non mostrare erroneamente "Segui anche tu" nella lista richieste.
+    func allFollowingIDs() async throws -> [String] {
+        let snap = try await usersCollection.document(uid)
+            .collection("following").getDocuments()
+        return snap.documents.map(\.documentID)
+    }
+
     func pendingRequests() async throws -> [FollowEdge] {
-        try await followers().filter { $0.status == .pending }
+        let snap = try await usersCollection.document(uid)
+            .collection("followers")
+            .whereField("status", isEqualTo: FollowStatus.pending.rawValue)
+            .getDocuments()
+        return snap.documents.compactMap(Self.decodeEdge)
+    }
+
+    /// Allinea i miei edge `following` rimasti `pending` allo stato reale.
+    ///
+    /// Quando seguo un profilo PRIVATO, l'approvazione del proprietario scrive
+    /// `accepted` nel SUO albero (`followers/{me}`) ma non può toccare il mio
+    /// `following/{target}` (le regole vietano la scrittura nel sottoalbero altrui):
+    /// resta `pending`. Di conseguenza la lista "Seguiti" (filtrata su `accepted`)
+    /// non mostrerebbe quei profili. Qui leggo lo stato autoritativo nell'albero
+    /// del target e promuovo a `accepted`, oppure elimino l'edge orfano se la
+    /// richiesta è stata rifiutata/rimossa.
+    func reconcileFollowing() async {
+        guard !uid.isEmpty else { return }
+        guard let snap = try? await usersCollection.document(uid)
+            .collection("following")
+            .whereField("status", isEqualTo: FollowStatus.pending.rawValue)
+            .getDocuments() else { return }
+
+        for doc in snap.documents {
+            // Stato autoritativo: il mio record follower nell'albero del target.
+            // getDocument non lancia se il documento è assente (ritorna nil);
+            // lancia solo su errori reali (rete/permessi) → in quel caso non tocco nulla.
+            do {
+                let real = try await followStatus(for: doc.documentID)
+                if real == .accepted {
+                    try? await doc.reference.setData(
+                        ["status": FollowStatus.accepted.rawValue], merge: true)
+                } else if real == nil {
+                    // Richiesta rifiutata o rimossa: edge orfano, lo elimino.
+                    // Era pending ⇒ il followingCount non era stato incrementato.
+                    try? await doc.reference.delete()
+                }
+                // real == .pending ⇒ ancora in attesa, lascio invariato.
+            } catch {
+                continue
+            }
+        }
     }
 
     // MARK: - Blocco utenti
@@ -192,13 +264,19 @@ final class SocialRepository {
             .collection("blocked").document(userID)
             .setData(["createdAt": Timestamp(date: Date())])
 
-        // Pulisce le relazioni esistenti in entrambe le direzioni (best effort).
-        try? await unfollow(userID)
-        try? await removeFollower(userID)
-        try? await usersCollection.document(userID)
-            .collection("followers").document(uid).delete()
-        try? await usersCollection.document(userID)
-            .collection("following").document(uid).delete()
+        // Leggo lo stato reale prima di eliminare, per decrementare i contatori
+        // solo se il follow era effettivamente accettato (non pending).
+        let myFollowDoc = try? await usersCollection.document(uid)
+            .collection("following").document(userID).getDocument()
+        let iFollowedAccepted = myFollowDoc?.data()?["status"] as? String == FollowStatus.accepted.rawValue
+
+        let theirFollowDoc = try? await usersCollection.document(uid)
+            .collection("followers").document(userID).getDocument()
+        let theyFollowedAccepted = theirFollowDoc?.data()?["status"] as? String == FollowStatus.accepted.rawValue
+
+        try? await unfollow(userID, wasAccepted: iFollowedAccepted)
+        try? await removeFollower(userID, wasAccepted: theyFollowedAccepted)
+        // Rimuove i mirror nell'albero dell'utente bloccato (già gestiti da unfollow/removeFollower).
     }
 
     func unblock(_ userID: String) async throws {

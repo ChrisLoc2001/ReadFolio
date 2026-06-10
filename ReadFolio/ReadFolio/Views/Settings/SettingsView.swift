@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject private var authVM: AuthViewModel
-    @State private var showDeleteAccountAlert = false
+    @State private var statDest: ProfileStatDest? = nil
 
     // Stats del profilo corrente
     @State private var completedCount:  Int? = nil
@@ -76,37 +76,17 @@ struct ProfileView: View {
                     }
                 }
 
-                Section {
-                    Button(role: .destructive) {
-                        showDeleteAccountAlert = true
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if authVM.isLoading {
-                                ProgressView()
-                            } else {
-                                Label("Elimina account",
-                                      systemImage: "person.crop.circle.badge.xmark")
-                            }
-                            Spacer()
-                        }
-                    }
-                    .disabled(authVM.isLoading)
-                } footer: {
-                    Text("Elimina definitivamente l'account e tutti i dati associati.")
-                }
             }
             .navigationTitle("Profilo")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { Task { await loadStats() } }
             .refreshable { await loadStats() }
-            .alert("Eliminare l'account?", isPresented: $showDeleteAccountAlert) {
-                Button("Elimina account", role: .destructive) {
-                    Task { await authVM.deleteAccount() }
+            .navigationDestination(item: $statDest) { dest in
+                switch dest {
+                case .letti:    OwnReadBooksView()
+                case .follower: FollowListsView(mode: .followers)
+                case .seguiti:  FollowListsView(mode: .following)
                 }
-                Button("Annulla", role: .cancel) {}
-            } message: {
-                Text("Questa azione è irreversibile: verranno eliminati definitivamente il tuo account e tutta la tua libreria.")
             }
         }
     }
@@ -140,17 +120,20 @@ struct ProfileView: View {
             HStack(spacing: 0) {
                 statCell(
                     value: completedCount.map { "\($0)" } ?? "—",
-                    label: "Letti"
+                    label: "Letti",
+                    action: completedCount != nil ? { statDest = .letti } : nil
                 )
                 Divider().frame(height: 32)
                 statCell(
                     value: "\(max(0, followersCount ?? 0))",
-                    label: "Follower"
+                    label: "Follower",
+                    action: { statDest = .follower }
                 )
                 Divider().frame(height: 32)
                 statCell(
                     value: "\(max(0, followingCount ?? 0))",
-                    label: "Seguiti"
+                    label: "Seguiti",
+                    action: { statDest = .seguiti }
                 )
             }
             .padding(.top, 4)
@@ -159,16 +142,26 @@ struct ProfileView: View {
         .padding(.vertical, 24)
     }
 
-    private func statCell(value: String, label: String) -> some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(.headline)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    private func statCell(value: String, label: String, action: (() -> Void)? = nil) -> some View {
+        Group {
+            if let action {
+                Button(action: action) { statCellBody(value: value, label: label) }
+                    .buttonStyle(.plain)
+            } else {
+                statCellBody(value: value, label: label)
+            }
         }
         .frame(maxWidth: .infinity)
     }
+
+    private func statCellBody(value: String, label: String) -> some View {
+        VStack(spacing: 2) {
+            Text(value).font(.headline)
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Navigation destinations
 
     // MARK: - Caricamento stats
 
@@ -183,4 +176,8 @@ struct ProfileView: View {
         completedCount = (await items)?.filter { $0.status == .completed }.count
         pendingCount   = (try? await pending)?.count ?? 0
     }
+}
+
+private enum ProfileStatDest: Hashable {
+    case letti, follower, seguiti
 }

@@ -5,6 +5,7 @@ import SwiftUI
 struct PublicProfileView: View {
     @State private var vm: PublicProfileViewModel
     @State private var showBlockAlert = false
+    @State private var statDest: StatDest? = nil
 
     init(profile: PublicProfile) {
         _vm = State(initialValue: PublicProfileViewModel(profile: profile))
@@ -15,15 +16,12 @@ struct PublicProfileView: View {
             Section { header }
 
             Section {
-                // Cliccabile in ogni stato: con richiesta "pending" il tap
-                // annulla la richiesta di follow.
                 Button {
                     Task { await vm.toggleFollow() }
                 } label: {
                     HStack {
                         Spacer()
-                        Text(vm.followButtonTitle)
-                            .fontWeight(.semibold)
+                        Text(vm.followButtonTitle).fontWeight(.semibold)
                         Spacer()
                     }
                 }
@@ -42,12 +40,23 @@ struct PublicProfileView: View {
         }
         .navigationTitle(vm.profile.name)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $statDest) { dest in
+            switch dest {
+            case .letti:
+                ItemsPreviewView(
+                    items: vm.items.filter { $0.status == .completed },
+                    title: "Libri letti"
+                )
+            case .follower:
+                PublicFollowListView(userID: vm.profile.id, mode: .followers)
+            case .seguiti:
+                PublicFollowListView(userID: vm.profile.id, mode: .following)
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    Button(role: .destructive) {
-                        showBlockAlert = true
-                    } label: {
+                    Button(role: .destructive) { showBlockAlert = true } label: {
                         Label("Blocca utente", systemImage: "hand.raised.fill")
                     }
                 } label: {
@@ -64,6 +73,8 @@ struct PublicProfileView: View {
         .overlay { if vm.isLoading { ProgressView() } }
         .task { await vm.load() }
     }
+
+    // MARK: - Header
 
     private var header: some View {
         VStack(spacing: 14) {
@@ -85,21 +96,23 @@ struct PublicProfileView: View {
                 }
             }
 
-            // Statistiche stile Instagram
             HStack(spacing: 0) {
                 statCell(
                     value: vm.completedCount.map { "\($0)" } ?? "—",
-                    label: "Letti"
+                    label: "Letti",
+                    action: vm.canViewLibrary ? { statDest = .letti } : nil
                 )
                 Divider().frame(height: 32)
                 statCell(
                     value: "\(max(0, vm.profile.followersCount ?? 0))",
-                    label: "Follower"
+                    label: "Follower",
+                    action: { statDest = .follower }
                 )
                 Divider().frame(height: 32)
                 statCell(
                     value: "\(max(0, vm.profile.followingCount ?? 0))",
-                    label: "Seguiti"
+                    label: "Seguiti",
+                    action: { statDest = .seguiti }
                 )
             }
             .padding(.top, 4)
@@ -109,16 +122,26 @@ struct PublicProfileView: View {
         .listRowBackground(Color.clear)
     }
 
-    private func statCell(value: String, label: String) -> some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(.headline)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    private func statCell(value: String, label: String, action: (() -> Void)? = nil) -> some View {
+        Group {
+            if let action {
+                Button(action: action) { statCellBody(value: value, label: label) }
+                    .buttonStyle(.plain)
+            } else {
+                statCellBody(value: value, label: label)
+            }
         }
         .frame(maxWidth: .infinity)
     }
+
+    private func statCellBody(value: String, label: String) -> some View {
+        VStack(spacing: 2) {
+            Text(value).font(.headline)
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Library
 
     private var librarySection: some View {
         Section("Libreria (\(vm.items.count))") {
@@ -126,12 +149,16 @@ struct PublicProfileView: View {
                 Text("Nessun elemento nella libreria.")
                     .foregroundStyle(.secondary)
             } else {
-                // Sola lettura: nessuna navigazione all'editor (che opererebbe
-                // sul repository dell'utente corrente, non su quello visualizzato).
                 ForEach(vm.items) { item in
                     LibraryItemRow(item: item)
                 }
             }
         }
     }
+}
+
+// MARK: - Navigation destinations
+
+private enum StatDest: Hashable {
+    case letti, follower, seguiti
 }

@@ -171,9 +171,14 @@ final class FollowListsViewModel {
         defer { isLoading = false }
         let edges: [FollowEdge]
         switch mode {
-        case .followers: edges = (try? await repo.followers())       ?? []
-        case .following: edges = (try? await repo.following())       ?? []
-        case .requests:  edges = (try? await repo.pendingRequests()) ?? []
+        case .followers:
+            edges = (try? await repo.followers()) ?? []
+        case .following:
+            // Allinea gli edge pending approvati dai profili privati prima di leggerli.
+            await repo.reconcileFollowing()
+            edges = (try? await repo.following()) ?? []
+        case .requests:
+            edges = (try? await repo.pendingRequests()) ?? []
         }
         var resolved: [PublicProfile] = []
         for edge in edges.sorted(by: { $0.createdAt > $1.createdAt }) {
@@ -181,9 +186,10 @@ final class FollowListsViewModel {
         }
         profiles = resolved
 
-        // Carica gli ID degli utenti già seguiti per gestire "Segui anche tu".
-        let myFollowing = (try? await repo.following()) ?? []
-        followingIDs = Set(myFollowing.map(\.id))
+        // Carica TUTTI gli ID seguiti (accepted + pending) per non mostrare
+        // "Segui anche tu" quando ho già una richiesta in attesa verso di loro.
+        let allIDs = (try? await repo.allFollowingIDs()) ?? []
+        followingIDs = Set(allIDs)
     }
 
     func approve(_ id: String) async {
@@ -220,6 +226,45 @@ final class FollowListsViewModel {
         do {
             try await repo.follow(profile)
             followingIDs.insert(profile.id)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Lista follower/seguiti di un altro utente (sola lettura)
+
+@Observable
+@MainActor
+final class PublicFollowListViewModel {
+    let userID: String
+    let mode: FollowListMode
+    var profiles: [PublicProfile] = []
+    var isLoading = false
+    var errorMessage: String?
+
+    private let repo = SocialRepository()
+
+    init(userID: String, mode: FollowListMode) {
+        self.userID = userID
+        self.mode   = mode
+    }
+
+    func load() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let edges: [FollowEdge]
+            switch mode {
+            case .followers: edges = try await repo.followers(of: userID)
+            case .following: edges = try await repo.following(of: userID)
+            case .requests:  edges = []
+            }
+            var resolved: [PublicProfile] = []
+            for edge in edges.sorted(by: { $0.createdAt > $1.createdAt }) {
+                if let p = try? await repo.profile(for: edge.id) { resolved.append(p) }
+            }
+            profiles = resolved
         } catch {
             errorMessage = error.localizedDescription
         }

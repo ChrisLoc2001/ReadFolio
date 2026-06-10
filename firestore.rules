@@ -96,7 +96,9 @@ service cloud.firestore {
       // Se il profilo richiede approvazione il record nasce 'pending'; non si può
       // auto-promuovere ad 'accepted' (update riservato al proprietario).
       match /followers/{followerId} {
-        allow read:   if isOwner(userId) || isOwner(followerId);
+        allow read:   if isOwner(userId) || isOwner(followerId)
+                       || ( isSignedIn() && !isBlockedBy(userId)
+                            && (profileIsPublic(userId) || isAcceptedFollower(userId)) );
         allow create: if isOwner(followerId)
                        && !isBlockedBy(userId)
                        && ( (requiresApproval(userId)  && request.resource.data.status == 'pending')
@@ -109,7 +111,9 @@ service cloud.firestore {
       // record che lo riguarda: serve per la pulizia quando rimuove un follower
       // o elimina il proprio account (rimozione dei mirror negli alberi altrui).
       match /following/{targetId} {
-        allow read:           if isOwner(userId);
+        allow read:           if isOwner(userId)
+                               || ( isSignedIn() && !isBlockedBy(userId)
+                                    && (profileIsPublic(userId) || isAcceptedFollower(userId)) );
         allow create, update: if isOwner(userId);
         allow delete:         if isOwner(userId) || isOwner(targetId);
       }
