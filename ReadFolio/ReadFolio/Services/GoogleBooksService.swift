@@ -104,8 +104,10 @@ actor GoogleBooksService {
 
     func fetchCoverData(from url: URL) async -> Data? {
         var httpsURL = url
-        if url.scheme == "http" {
-            var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        // Force-unwrap evitato: su URL malformato dal backend non deve crashare,
+        // semplicemente si prova l'URL originale.
+        if url.scheme == "http",
+           var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) {
             comps.scheme = "https"
             httpsURL = comps.url ?? url
         }

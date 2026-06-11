@@ -194,8 +194,16 @@ final class AuthViewModel: ObservableObject {
             errorMessage = "Le password non coincidono."
             return
         }
-        guard password.count >= 6 else {
-            errorMessage = "La password deve avere almeno 6 caratteri."
+        guard password.count >= 8 else {
+            errorMessage = "La password deve avere almeno 8 caratteri."
+            return
+        }
+        // Requisito minimo di complessità: almeno una lettera e una cifra.
+        // Riduce l'efficacia degli attacchi a dizionario sulle password deboli.
+        let hasLetter = password.contains(where: \.isLetter)
+        let hasDigit  = password.contains(where: \.isNumber)
+        guard hasLetter && hasDigit else {
+            errorMessage = "La password deve contenere almeno una lettera e un numero."
             return
         }
         guard username.count >= 3 else {

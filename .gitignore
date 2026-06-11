@@ -63,6 +63,10 @@ fastlane/test_output
 
 # Secrets / API keys (non versionare le chiavi reali)
 ReadFolio/ReadFolio/Secrets.xcconfig
+# Config Firebase: contiene API key e ID progetto. La sicurezza si basa su
+# Security Rules + App Check, ma si evita comunque di versionarlo. Va fornito
+# localmente e in CI. Restringi la API key per bundle ID nella Cloud Console.
+ReadFolio/ReadFolio/GoogleService-Info.plist
 
 # Local build artifacts
 ReadFolio/build/

@@ -44,7 +44,7 @@ struct SignUpView: View {
                     // Username con feedback disponibilità
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            TextField("Nome utente (min. 3 caratteri)", text: $username)
+                            TextField("Nome Utente", text: $username)
                                 .autocorrectionDisabled()
                                 .textInputAutocapitalization(.never)
                                 .padding(12)
@@ -79,7 +79,7 @@ struct SignUpView: View {
                         }
                     }
 
-                    SecureField("Password (min. 6 caratteri)", text: $password)
+                    SecureField("Password (min. 8 caratteri)", text: $password)
                         .textContentType(.newPassword)
                         .padding(12)
                         .background(.regularMaterial,
@@ -93,8 +93,8 @@ struct SignUpView: View {
                 }
 
                 // MARK: - Validation hints
-                if !password.isEmpty && password.count < 6 {
-                    Text("La password deve avere almeno 6 caratteri")
+                if !password.isEmpty && password.count < 8 {
+                    Text("La password deve avere almeno 8 caratteri")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -191,7 +191,7 @@ struct SignUpView: View {
 
     private var isFormInvalid: Bool {
         authVM.isLoading          ||
-        password.count < 6        ||
+        password.count < 8        ||
         password != confirmPassword ||
         email.isEmpty             ||
         username.count < 3        ||
