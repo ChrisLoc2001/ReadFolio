@@ -12,6 +12,7 @@
 		ECCF15F72FCECA33009C06C2 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = ECCF15F62FCECA33009C06C2 /* GoogleSignInSwift */; };
 		ECCF15FC2FCEDA05009C06C2 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = ECCF15FB2FCEDA05009C06C2 /* FirebaseFirestore */; };
 		ECFB57A0E0000000000000A2 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = ECFB57A0E0000000000000A1 /* FirebaseStorage */; };
+		ECFB57A0E0000000000000B2 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = ECFB57A0E0000000000000B1 /* FirebaseAppCheck */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,6 +50,7 @@
 				EC97CC4B2FCEC80C0077B3A4 /* FirebaseAuth in Frameworks */,
 				ECCF15F52FCECA33009C06C2 /* GoogleSignIn in Frameworks */,
 				ECFB57A0E0000000000000A2 /* FirebaseStorage in Frameworks */,
+				ECFB57A0E0000000000000B2 /* FirebaseAppCheck in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -104,6 +106,7 @@
 				ECCF15F62FCECA33009C06C2 /* GoogleSignInSwift */,
 				ECCF15FB2FCEDA05009C06C2 /* FirebaseFirestore */,
 				ECFB57A0E0000000000000A1 /* FirebaseStorage */,
+				ECFB57A0E0000000000000B1 /* FirebaseAppCheck */,
 			);
 			productName = ReadFolio;
 			productReference = ECF4966F2FCC9FC7009ED5D8 /* ReadFolio.app */;
@@ -434,6 +437,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = EC97CC492FCEC80C0077B3A4 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseStorage;
+		};
+		ECFB57A0E0000000000000B1 /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EC97CC492FCEC80C0077B3A4 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

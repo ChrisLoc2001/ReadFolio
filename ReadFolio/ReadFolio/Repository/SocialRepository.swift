@@ -2,6 +2,19 @@ import Foundation
 import FirebaseFirestore
 import FirebaseAuth
 
+/// Errori delle operazioni social.
+enum SocialError: LocalizedError {
+    /// Operazione di scrittura tentata senza un utente autenticato.
+    case notAuthenticated
+
+    var errorDescription: String? {
+        switch self {
+        case .notAuthenticated:
+            return "Devi aver effettuato l'accesso per eseguire questa operazione."
+        }
+    }
+}
+
 /// Accesso Firestore alle funzionalità sociali: profili pubblici, ricerca utenti,
 /// follow/unfollow (con eventuale approvazione), richieste, blocco utenti e lettura
 /// della libreria altrui.
@@ -14,6 +27,16 @@ final class SocialRepository {
     private let db = Firestore.firestore()
     private var uid: String { Auth.auth().currentUser?.uid ?? "" }
 
+    /// Restituisce l'uid corrente o lancia se non c'è un utente autenticato.
+    /// Da usare all'inizio di ogni metodo di SCRITTURA per evitare di operare
+    /// su path Firestore con id vuoto (es. `users//followers/...`).
+    @discardableResult
+    private func requireUID() throws -> String {
+        let id = uid
+        guard !id.isEmpty else { throw SocialError.notAuthenticated }
+        return id
+    }
+
     private var usersCollection: CollectionReference { db.collection("users") }
     private var publicProfiles:  CollectionReference { db.collection("publicProfiles") }
 
@@ -23,6 +46,7 @@ final class SocialRepository {
     func upsertMyPublicProfile(username: String,
                                displayName: String,
                                isPublic: Bool) async throws {
+        try requireUID()
         let profile = PublicProfile(
             id:          uid,
             username:    username.lowercased(),
@@ -44,6 +68,7 @@ final class SocialRepository {
 
     /// Aggiorna solo le impostazioni di privacy.
     func updatePrivacy(isPublic: Bool) async throws {
+        try requireUID()
         try await publicProfiles.document(uid).setData([
             "isPublic": isPublic
         ], merge: true)
@@ -55,6 +80,7 @@ final class SocialRepository {
     func updateProfileInfo(username: String,
                            displayName: String,
                            isPublic: Bool) async throws {
+        try requireUID()
         try await publicProfiles.document(uid).setData([
             "username":    username.lowercased(),
             "displayName": displayName,
@@ -105,6 +131,7 @@ final class SocialRepository {
     /// per i follow immediati (profili pubblici); per quelli privati si aggiornano
     /// al momento dell'approvazione.
     func follow(_ target: PublicProfile) async throws {
+        try requireUID()
         let status: FollowStatus = target.requiresFollowApproval ? .pending : .accepted
         let edge: [String: Any] = [
             "status":    status.rawValue,
@@ -126,6 +153,7 @@ final class SocialRepository {
     /// Smette di seguire un utente o annulla una richiesta pending.
     /// `wasAccepted` distingue i due casi per aggiornare i contatori correttamente.
     func unfollow(_ userID: String, wasAccepted: Bool = true) async throws {
+        try requireUID()
         try await usersCollection.document(userID)
             .collection("followers").document(uid).delete()
         try await usersCollection.document(uid)
@@ -141,6 +169,7 @@ final class SocialRepository {
 
     /// Il proprietario approva una richiesta in attesa.
     func approve(follower userID: String) async throws {
+        try requireUID()
         try await usersCollection.document(uid)
             .collection("followers").document(userID)
             .setData(["status": FollowStatus.accepted.rawValue], merge: true)
@@ -154,6 +183,7 @@ final class SocialRepository {
     /// Rifiuta una richiesta pending o rimuove un follower già accettato.
     /// `wasAccepted` distingue i due casi per aggiornare i contatori correttamente.
     func removeFollower(_ userID: String, wasAccepted: Bool = false) async throws {
+        try requireUID()
         try await usersCollection.document(uid)
             .collection("followers").document(userID).delete()
         try? await usersCollection.document(userID)
@@ -260,6 +290,7 @@ final class SocialRepository {
     /// Blocca un utente: rimuove ogni relazione reciproca di follow e impedisce
     /// (via Security Rules) che l'utente bloccato veda la libreria o invii follow.
     func block(_ userID: String) async throws {
+        try requireUID()
         try await usersCollection.document(uid)
             .collection("blocked").document(userID)
             .setData(["createdAt": Timestamp(date: Date())])
@@ -280,6 +311,7 @@ final class SocialRepository {
     }
 
     func unblock(_ userID: String) async throws {
+        try requireUID()
         try await usersCollection.document(uid)
             .collection("blocked").document(userID).delete()
     }
